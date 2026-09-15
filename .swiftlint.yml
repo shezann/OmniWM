@@ -74,6 +74,12 @@ file_length:
 function_body_length:
   warning: 50
 
+# "master" is the established tiling-window-manager term for the primary tile in a master/stack
+# layout (dwm, Hyprland's master layout); the Dwindle centered-master feature uses it deliberately.
+inclusive_language:
+  override_allowed_terms:
+    - master
+
 identifier_name:
   min_length:
     warning: 2

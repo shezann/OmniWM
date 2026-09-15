@@ -16,6 +16,21 @@ struct DwindleSettings {
 
     var innerGap: CGFloat = 8.0
 
+    /// Keeps one master tile in the center of the workspace and stacks every other tile on the
+    /// left and right. New tiles alternate sides, starting on the right.
+    var centeredMaster: Bool = false
+
+    /// Fraction of the workspace width the master tile takes while `centeredMaster` is on.
+    var masterRatio: CGFloat = DwindleSettings.defaultMasterRatio
+
+    static let defaultMasterRatio: CGFloat = 0.5
+    static let masterRatioRange: ClosedRange<CGFloat> = 0.2 ... 0.8
+
+    func clampedMasterRatio(_ ratio: CGFloat) -> CGFloat {
+        guard ratio.isFinite else { return Self.defaultMasterRatio }
+        return min(max(ratio, Self.masterRatioRange.lowerBound), Self.masterRatioRange.upperBound)
+    }
+
     func clampedRatio(_ ratio: CGFloat) -> CGFloat {
         min(max(ratio, 0.1), 1.9)
     }

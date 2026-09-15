@@ -32,7 +32,8 @@ struct StatusMenuControlPreviewView: View {
              .moveEdge,
              .mouseWarp:
             true
-        case .focusedWindow,
+        case .windowManagement,
+             .focusedWindow,
              .workspaceBar,
              .keepAwake,
              .hiddenMenuIcons:
@@ -59,6 +60,8 @@ private struct StatusMenuControlPreviewCanvas: View {
         Canvas { context, size in
             context.scaleBy(x: size.width / 72, y: size.height / 72)
             switch preview {
+            case .windowManagement:
+                drawWindowManagement(in: &context)
             case .focusedWindow:
                 drawFocusedWindow(in: &context)
             case .workspaceBar:
@@ -85,6 +88,18 @@ private struct StatusMenuControlPreviewCanvas: View {
 }
 
 extension StatusMenuControlPreviewCanvas {
+    private func drawWindowManagement(in context: inout GraphicsContext) {
+        let display = CGRect(x: 7, y: 14, width: 58, height: 41)
+        drawDisplay(display, active: true, in: &context)
+        let left = CGRect(x: 11, y: 18, width: 24, height: 33)
+        let right = CGRect(x: 38, y: 18, width: 23, height: 33)
+        drawWindow(left, focused: true, in: &context)
+        drawWindow(right, focused: false, in: &context)
+        drawContent(in: left.insetBy(dx: 4, dy: 11), in: &context)
+        let symbol = context.resolve(Image(systemName: "pause.circle.fill"))
+        context.draw(symbol, at: CGPoint(x: 58, y: 58))
+    }
+
     private func drawFocusedWindow(in context: inout GraphicsContext) {
         let rect = CGRect(x: 8, y: 11, width: 56, height: 47)
         drawWindow(rect, focused: true, in: &context)

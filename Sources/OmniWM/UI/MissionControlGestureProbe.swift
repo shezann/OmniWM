@@ -25,10 +25,17 @@ final class MissionControlGestureProbe {
         "TrackpadThreeFingerVertSwipeGesture",
         "TrackpadFourFingerVertSwipeGesture"
     ]
+    private static let horizontalSwipeKeys = [
+        "TrackpadThreeFingerHorizSwipeGesture",
+        "TrackpadFourFingerHorizSwipeGesture"
+    ]
     private static let preferenceDomains = [dockDomain, builtInTrackpadDomain, bluetoothTrackpadDomain]
     private static let trackpadDomains = [builtInTrackpadDomain, bluetoothTrackpadDomain]
 
+    /// Whether the Mission Control (vertical) swipe is on in macOS.
     private(set) var status: Status = .unknown
+    /// Whether "Swipe between full-screen applications" (horizontal) is on in macOS.
+    private(set) var fullScreenSwipeStatus: Status = .unknown
 
     private let preferenceReader: @MainActor (String, String) -> Any?
     private let domainSynchronizer: @MainActor (String) -> Void
@@ -57,31 +64,39 @@ final class MissionControlGestureProbe {
         for domain in Self.preferenceDomains {
             domainSynchronizer(domain)
         }
+        status = missionControlStatus()
+        fullScreenSwipeStatus = trackpadKeyStatus(Self.horizontalSwipeKeys)
+    }
 
+    func shouldWarn(axis: WorkspaceSwipeAxis, fingerCount: GestureFingerCount) -> Bool {
+        guard fingerCount == .three || fingerCount == .four else { return false }
+        switch axis {
+        case .vertical: return status == .enabled
+        case .horizontal: return fullScreenSwipeStatus == .enabled
+        }
+    }
+
+    private func missionControlStatus() -> Status {
         if let enabled = Self.booleanValue(
             preferenceReader(Self.missionControlGestureKey, Self.dockDomain)
         ) {
-            status = enabled ? .enabled : .disabled
-            return
+            return enabled ? .enabled : .disabled
         }
+        return trackpadKeyStatus(Self.verticalSwipeKeys)
+    }
 
+    private func trackpadKeyStatus(_ keys: [String]) -> Status {
         var foundNonnegativeValue = false
         for domain in Self.trackpadDomains {
-            for key in Self.verticalSwipeKeys {
+            for key in keys {
                 guard let value = Self.integerValue(preferenceReader(key, domain)), value >= 0 else { continue }
                 if value > 0 {
-                    status = .enabled
-                    return
+                    return .enabled
                 }
                 foundNonnegativeValue = true
             }
         }
-        status = foundNonnegativeValue ? .disabled : .unknown
-    }
-
-    func shouldWarn(axis: WorkspaceSwipeAxis, fingerCount: GestureFingerCount) -> Bool {
-        guard status == .enabled, axis == .vertical else { return false }
-        return fingerCount == .three || fingerCount == .four
+        return foundNonnegativeValue ? .disabled : .unknown
     }
 
     func openTrackpadSettings() {

@@ -8,7 +8,7 @@ sidebar:
 Complete reference for `settings.toml`, in the file's canonical order. The authoritative schema is [`CanonicalTOMLConfig.swift`](https://github.com/BarutSRB/OmniWM/blob/main/Sources/OmniWM/Core/Config/CanonicalTOMLConfig.swift); defaults come from [`SettingsExport.swift`](https://github.com/BarutSRB/OmniWM/blob/main/Sources/OmniWM/Core/Config/SettingsExport.swift) and [`BuiltInSettingsDefaults.swift`](https://github.com/BarutSRB/OmniWM/blob/main/Sources/OmniWM/Core/Config/BuiltInSettingsDefaults.swift).
 
 :::caution
-The current schema is strict — a missing required key in a version 3 file invalidates the whole file, `hotkeys` must list every assignable action exactly once, and an enumerated string key must use one of its listed values (an unknown value rejects the whole file, exactly like a missing key). Edit values in place; see [Configuration](/config/configuration/).
+The current schema is strict — a missing required key in a version 4 file invalidates the whole file, `hotkeys` must list every assignable action exactly once, and an enumerated string key must use one of its listed values (an unknown value rejects the whole file, exactly like a missing key). Edit values in place; see [Configuration](/config/configuration/).
 :::
 
 **Conventions**
@@ -22,15 +22,15 @@ The current schema is strict — a missing required key in a version 3 file inva
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `schemaVersion` | integer | `3` | Version of the complete `settings.toml` schema. This top-level key appears before the first table. |
+| `schemaVersion` | integer | `6` | Version of the complete `settings.toml` schema. This top-level key appears before the first table. |
 
 The canonical file declares:
 
 ```toml
-schemaVersion = 3
+schemaVersion = 6
 ```
 
-An absent version identifies a legacy version 0 file, while OmniWM v0.6.4 emitted version 1. OmniWM upgrades version 0, 1, and 2 files sequentially in memory before strict version 3 validation, retaining the compatibility guarantee for settings emitted by v0.6.2 through v0.6.4. The version 2 to version 3 step moves the old flat routing rows into one saved arrangement. A successful upgrade creates an exact write-once `settings.toml.pre-v3` or `settings.toml.pre-v3.1` backup, then atomically rewrites canonical TOML once; this can reorder keys and removes comments, while preserving unrecognized keys when their owner can be matched safely. Valid release migrations never use the `.corrupt` recovery slots. Older schema-less files are attempted but remain untouched with defaults active if they cannot validate, and files declaring a newer unsupported version remain untouched with configuration writes blocked. See [Automatic version upgrades](/config/configuration/#automatic-version-upgrades) for the migration rules and recovery behavior.
+An absent version identifies a legacy version 0 file, while OmniWM v0.6.4 emitted version 1. OmniWM upgrades version 0 through 5 files sequentially in memory before strict version 6 validation, retaining the compatibility guarantee for settings emitted by v0.6.2 through v0.6.4. The version 2 to version 3 step moves the old flat routing rows into one saved arrangement, the version 3 to version 4 step adds the unassigned `swapWithMaster` hotkey entry, the version 4 to version 5 step adds `toggleWindowManagement`, and the version 5 to version 6 step adds `bringFocusedWindowFrontAndCenter`. A successful upgrade creates an exact write-once `settings.toml.pre-v6` or `settings.toml.pre-v6.1` backup, then atomically rewrites canonical TOML once; this can reorder keys and removes comments, while preserving unrecognized keys when their owner can be matched safely. Valid release migrations never use the `.corrupt` recovery slots. Older schema-less files are attempted but remain untouched with defaults active if they cannot validate, and files declaring a newer unsupported version remain untouched with configuration writes blocked. See [Automatic version upgrades](/config/configuration/#automatic-version-upgrades) for the migration rules and recovery behavior.
 
 ## general
 
@@ -149,6 +149,16 @@ Options for the Dwindle (BSP) layout.
 | `singleWindowFit` | string | `"fill"` | Size of a lone window: `fill` (the "Full Screen" fit, which uses the fullscreen layout frame and honors `fullscreenUsesOuterGaps`) or `WIDTHxHEIGHT` (no span mode in Dwindle). |
 | `useGlobalGaps` | boolean | `true` | Uses the [`gaps`](#gaps) values; when `false`, the inner gap comes from a per-monitor `innerGap` override (falling back to `gaps.size`), clamped to the same 0–64 range as `gaps.size`. |
 | `moveToRootStable` | boolean | `true` | Keeps a window on the same screen side when moving it to the root. |
+| `centeredMaster` | boolean | `false` | Keeps one master window in the center with the other windows stacked in a left and a right column; new windows alternate sides starting on the right. Use the `Swap with Master` action to move the focused window into the center. |
+| `masterRatio` | float | `0.5` | Share of the width the centered master takes (`0.2`–`0.8`); the side stacks split the rest. |
+
+## frontAndCenter
+
+Options for the **Bring Focused Window Front and Center** action (`Option + Shift + F` by default), which floats the frontmost app's focused window, sizes it to a share of the monitor under the pointer, centers it there, and raises it; a second press puts the window back. The whole table is optional and absent from files written before it existed.
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `sizeRatio` | float | `0.7` | Share of the monitor's visible frame the window takes on each axis (`0.2`–`1.0`), so it keeps the screen's aspect ratio. Per-display values come from [`[[monitorFrontAndCenterOverrides]]`](#per-monitor-overrides). |
 
 ## borders
 
@@ -221,11 +231,14 @@ Mouse and trackpad gestures.
 | `mouseMoveModifierKey` | string | `"option"` | Modifier for drag-to-swap of tiled windows in Niri and Dwindle (Niri also accepts `Shift` for insert): `off`, `option`, `control`, `command`, `controlOption`, `optionCommand`, `controlCommand`, `controlOptionCommand`. |
 | `mouseResizeModifierKey` | string | `"option"` | Modifier for right-drag resize: `option`, `control`, `command`, `shift`, `controlOption`, `optionCommand`, `optionShift`, `controlCommand`, `controlShift`, `commandShift`, `controlOptionCommand`, `controlOptionShift`, `optionCommandShift`, `controlCommandShift`, `controlOptionCommandShift`. |
 | `fingerCount` | integer | `3` | Trackpad column-scroll finger count: `2`, `3`, or `4`. |
-| `invertDirection` | boolean | `true` | Inverts trackpad gesture direction. |
+| `invertDirection` | boolean | `true` | Natural direction for Niri column-scroll trackpad gestures. |
 | `trackpadScrollStyle` | string | `"snap"` | `snap` (snap to columns) or `momentum`. |
 | `workspaceSwipeEnabled` | boolean | `false` | Trackpad swipe switches to the next/previous workspace. |
 | `workspaceSwipeFingerCount` | integer | `3` | Workspace-swipe finger count: `2`, `3`, or `4`. |
 | `workspaceSwipeAxis` | string | `"vertical"` | Workspace-swipe axis: `horizontal` or `vertical`. |
+| `workspaceSwipeInvertDirection` | boolean | `true` | Natural direction for workspace swipes, independent of `invertDirection`: `true` means swipe left (or up) goes to the next workspace; `false` means swipe right (or down) goes to the next workspace. When the key is absent it follows `invertDirection`. |
+| `workspaceSwipeDisablesSystemGesture` | boolean | `false` | While workspace swipe is on, turn off the macOS gesture that shares its fingers and axis (Mission Control for vertical, Swipe between full-screen applications for horizontal), and turn it back on when workspace swipe is off or OmniWM quits. Two-finger swipes are left alone. |
+| `workspaceSwipeDistance` | float | `0.28` | Fraction of the trackpad the fingers must travel before a workspace swipe fires, from `0.08` to `0.6`. A fast flick switches sooner regardless. |
 
 ## statusBar
 
@@ -372,7 +385,7 @@ minWidth = 574.0
 
 ## Per-monitor overrides
 
-Five arrays hold per-monitor exceptions to the global tables. Every entry identifies its monitor with `monitorName` (required) plus optional `monitorDisplayUUID` and `monitorDisplayId`; all entries except orientation also carry an `id` UUID. Override keys are all optional — an omitted key falls back to the corresponding global setting. All five arrays default to empty. Custom routing grids live separately in [`routing.arrangements`](#routing).
+Six arrays hold per-monitor exceptions to the global tables. Every entry identifies its monitor with `monitorName` (required) plus optional `monitorDisplayUUID` and `monitorDisplayId`; all entries except orientation also carry an `id` UUID. Override keys are all optional — an omitted key falls back to the corresponding global setting. All six arrays default to empty. Custom routing grids live separately in [`routing.arrangements`](#routing).
 
 | Array | Overridable keys |
 | --- | --- |
@@ -381,6 +394,7 @@ Five arrays hold per-monitor exceptions to the global tables. Every entry identi
 | `monitorNiriOverrides` | `visibleContainerCount`, `centerFocusedColumn`, `alwaysCenterSingleColumn`, `singleWindowFit`, `infiniteLoop` — see [`niri`](#niri) |
 | `monitorDwindleOverrides` | `smartSplit`, `defaultSplitRatio`, `splitWidthMultiplier`, `singleWindowFit`, `useGlobalGaps`, `innerGap` — see [`dwindle`](#dwindle) |
 | `monitorGapOverrides` | `innerGap`, `outerGapLeft`, `outerGapRight`, `outerGapTop`, `outerGapBottom`, `fullscreenUsesOuterGaps` — see [`gaps`](#gaps) |
+| `monitorFrontAndCenterOverrides` | `sizeRatio` — see [`frontAndCenter`](#frontandcenter). The whole array is optional and absent from files written before it existed |
 
 ```toml
 [[monitorGapOverrides]]

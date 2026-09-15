@@ -89,6 +89,9 @@ extension DwindleLayoutEngine {
         state.selectedNodeId = nil
         state.preselection = nil
         state.pendingMovementFrameSeeds.removeAll()
+        state.masterOrder.removeAll()
+        state.appliedMasterRatio = nil
+        reconcileCenteredMaster(state: state, in: workspaceId)
         return true
     }
 

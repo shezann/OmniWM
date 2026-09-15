@@ -62,6 +62,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var statusBarController: StatusBarController?
+    private var systemSwipeGestureCoordinator: SystemSwipeGestureCoordinator?
     private var ipcServer: IPCServerLifecycle?
     private var cliManager: AppCLIManager?
     private var updateCoordinator: (any AppUpdateCoordinating)?
@@ -72,9 +73,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchOverlayFinished = false
     private var launchPermissionsWindowController: LaunchPermissionsWindowController?
     private var didFinishBootstrap = false
+    private var terminationSignalSource: DispatchSourceSignal?
 
     public func applicationDidFinishLaunching(_: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
+        installTerminationSignalHandler()
         _ = OmniWMBuildInfo.executableSHA256
         bootstrapApplication()
     }
@@ -85,6 +88,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_: Notification) {
         statusBarController?.cleanup()
+        systemSwipeGestureCoordinator?.restoreAll()
         if let controller = AppDelegate.sharedBootstrap?.controller {
             controller.serviceLifecycleManager.stop()
             controller.workspaceManager.flushPersistedWindowRestoreCatalogNow()
@@ -93,6 +97,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         stopMonitorSetupPresentationObservation()
         stopIPCServer()
         runtimeStateStore?.flushNow()
+    }
+
+    /// Turns SIGTERM (what `pkill` and `make run` send) into a normal quit so `applicationWillTerminate`
+    /// still runs and restores anything OmniWM changed on the system, such as macOS swipe gestures.
+    private func installTerminationSignalHandler() {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler {
+            NSApplication.shared.terminate(nil)
+        }
+        source.resume()
+        terminationSignalSource = source
     }
 
     func bootstrapApplication() {
@@ -154,6 +170,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             clipboardHistoryDirectory: storagePaths.stateDirectory
         )
         controller.applyPersistedSettings(settings)
+        let systemSwipeGestureCoordinator = SystemSwipeGestureCoordinator()
+        self.systemSwipeGestureCoordinator = systemSwipeGestureCoordinator
+        settings.onSystemSwipeGesturePolicyChanged = { [weak systemSwipeGestureCoordinator, weak settings] in
+            guard let systemSwipeGestureCoordinator, let settings else { return }
+            systemSwipeGestureCoordinator.reconcile(desired: settings.managedSystemSwipeGestureGroup)
+        }
+        systemSwipeGestureCoordinator.reconcile(desired: settings.managedSystemSwipeGestureGroup, force: true)
         let cliManager = AppCLIManager()
         let updateCoordinator = UpdateCoordinator(settings: settings, runtimeState: runtimeState)
         self.cliManager = cliManager

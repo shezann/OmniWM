@@ -60,6 +60,8 @@ final class WorkspaceManager {
     var onRuntimeInvalidation:
         ((WorkspaceDescriptor.ID?, InvalidationDomain, SessionSurfaceInvalidationScope) -> Void)?
     var onWindowPresenceObserved: ((WindowHandle) -> Void)?
+    /// Release presentation tied to the old AX identity before removing or replacing it.
+    var onWindowIdentityWillChange: ((WindowState) -> Void)?
     var onWindowRemoved: ((WindowState) -> Void)?
     var onDeferredWorkspaceMonitorMove: ((WorkspaceMonitorMoveOutcome) -> Void)?
     var onAnimationMotionsWillBeRemoved: ((Set<WorkspaceDescriptor.ID>) -> Void)?
@@ -1999,6 +2001,8 @@ final class WorkspaceManager {
             return nil
         }
 
+        onWindowIdentityWillChange?(existingEntry)
+
         if let originalToken = nativeFullscreenOriginalToken(forCurrentToken: oldToken),
            var record = nativeFullscreenRecordsByOriginalToken[originalToken]
         {
@@ -2377,6 +2381,7 @@ final class WorkspaceManager {
 
     @discardableResult
     private func removeTrackedWindow(_ entry: WindowState) -> WindowState {
+        onWindowIdentityWillChange?(entry)
         let previousFocus = world.focus
         let removesNativeFullscreenFocusOwner = activeNativeFullscreenFocusOwnerToken == entry.token
         recordReconcileEvent(

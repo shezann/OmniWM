@@ -126,6 +126,10 @@ final class WMController {
 
     var isEnabled: Bool = true
     var hotkeysEnabled: Bool = true
+    /// Runtime-only pause of window management, toggled from the status menu, the
+    /// `toggleWindowManagement` hotkey, or `omniwmctl`. Never persisted; OmniWM always resumes
+    /// managing windows after a relaunch.
+    private(set) var isWindowManagementPaused = false
     private(set) var desiredEnabled: Bool = true
     private(set) var desiredHotkeysEnabled: Bool = true
     private(set) var accessibilityPermissionGranted = AccessibilityPermissionMonitor.shared.isGranted
@@ -292,6 +296,8 @@ final class WMController {
     @ObservationIgnored
     private(set) lazy var commandHandler = CommandHandler(controller: self)
     @ObservationIgnored
+    private(set) lazy var workspaceSlideController = WorkspaceSlideController(controller: self)
+    @ObservationIgnored
     private(set) lazy var workspaceNavigationHandler = WorkspaceNavigationHandler(controller: self)
     @ObservationIgnored
     private(set) lazy var layoutRefreshController = LayoutRefreshController(controller: self)
@@ -330,6 +336,12 @@ final class WMController {
     var warpMouseCursorPosition: (CGPoint) -> Void = { CGWarpMouseCursorPosition($0) }
     @ObservationIgnored
     var currentMouseLocation: () -> CGPoint = { NSEvent.mouseLocation }
+    /// Resolves the window an app currently has focused; tests swap in a fake so no AX call is made.
+    var frontAndCenterFocusedWindowResolver: (pid_t) -> AXWindowRef? = WMController.liveFocusedAXWindow(pid:)
+    /// Managed windows brought front and center, so a second press can put them back.
+    var frontAndCenterRestoreStates: [WindowToken: FrontAndCenterRestoreState] = [:]
+    /// Windows centered through raw Accessibility (paused or untracked), keyed by window id.
+    var frontAndCenterUnmanagedRecords: [Int: FrontAndCenterUnmanagedRecord] = [:]
     @ObservationIgnored
     weak var ipcApplicationBridge: IPCApplicationBridge?
 
@@ -420,6 +432,9 @@ final class WMController {
         workspaceManager.onWindowRemoved = { [weak self] entry in
             self?.windowActionHandlerStorage?.handleOverviewWindowRemoved(entry)
         }
+        workspaceManager.onWindowIdentityWillChange = { [weak self] entry in
+            self?.workspaceSlideController.invalidate(workspaceId: entry.workspaceId)
+        }
         workspaceManager.onDeferredWorkspaceMonitorMove = { [weak self] outcome in
             self?.layoutRefreshController.commitWorkspaceMonitorTransition(outcome)
         }
@@ -502,7 +517,9 @@ final class WMController {
             smartSplit: settings.dwindleSmartSplit,
             defaultSplitRatio: settings.dwindleDefaultSplitRatio,
             splitWidthMultiplier: settings.dwindleSplitWidthMultiplier,
-            singleWindowFit: settings.dwindleSingleWindowFit
+            singleWindowFit: settings.dwindleSingleWindowFit,
+            centeredMaster: settings.dwindleCenteredMaster,
+            masterRatio: settings.dwindleMasterRatio
         )
 
         updateWorkspaceConfig()
@@ -566,6 +583,38 @@ final class WMController {
         reconcileEnabledAndHotkeysState()
     }
 
+    /// Pauses or resumes window management. Pausing hands every managed window back to macOS
+    /// where it currently sits, brings windows parked for inactive workspaces back on screen, and
+    /// stops all services. Resuming restarts the services, which re-applies the remembered
+    /// layouts. Returns `false` when the state did not change.
+    @discardableResult
+    func setWindowManagementPaused(_ paused: Bool) -> Bool {
+        guard paused != isWindowManagementPaused else { return false }
+        if paused {
+            workspaceSlideController.cancel(requestRelayout: false)
+            if isOverviewOpen() {
+                toggleOverview()
+            }
+            releaseManagedWindowsForPause()
+            isWindowManagementPaused = true
+            serviceLifecycleManager.stop()
+        } else {
+            isWindowManagementPaused = false
+            serviceLifecycleManager.start()
+        }
+        reconcileEnabledAndHotkeysState()
+        statusBarController?.updateButtonAppearance()
+        refreshStatusBar()
+        DiagnosticsEventRecorder.shared.recordLifecycle(
+            name: paused ? "windowManagement.paused" : "windowManagement.resumed"
+        )
+        return true
+    }
+
+    func toggleWindowManagementPaused() {
+        setWindowManagementPaused(!isWindowManagementPaused)
+    }
+
     func setHotkeysEnabled(_ enabled: Bool) {
         desiredHotkeysEnabled = enabled
         reconcileEnabledAndHotkeysState()
@@ -604,14 +653,24 @@ final class WMController {
     }
 
     func reconcileEnabledAndHotkeysState() {
-        isEnabled = desiredEnabled && accessibilityPermissionGranted
+        isEnabled = desiredEnabled && accessibilityPermissionGranted && !isWindowManagementPaused
 
         let shouldEnableHotkeys = desiredHotkeysEnabled
             && isEnabled
             && hasStartedServices
             && !serviceLifecycleManager.isSecureInputActive
+        // While paused, keep the hotkey center alive for the resume shortcut and the lost-window
+        // escape hatch only.
+        let pausedResumeHotkeyOnly = isWindowManagementPaused
+            && desiredEnabled
+            && desiredHotkeysEnabled
+            && accessibilityPermissionGranted
+            && !serviceLifecycleManager.isSecureInputActive
         hotkeysEnabled = shouldEnableHotkeys
-        shouldEnableHotkeys ? hotkeys.start() : hotkeys.stop()
+        hotkeys.setCommandAllowlist(
+            pausedResumeHotkeyOnly ? [.toggleWindowManagement, .bringFocusedWindowFrontAndCenter] : nil
+        )
+        (shouldEnableHotkeys || pausedResumeHotkeyOnly) ? hotkeys.start() : hotkeys.stop()
         refreshHotkeyFailureSnapshots()
     }
 
@@ -1106,7 +1165,9 @@ final class WMController {
             splitWidthMultiplier: resolved.splitWidthMultiplier,
             singleWindowFit: resolved.singleWindowFit,
             useGlobalGaps: resolved.useGlobalGaps,
-            innerGap: max(resolved.innerGap, borderClearance(scale: scale))
+            innerGap: max(resolved.innerGap, borderClearance(scale: scale)),
+            centeredMaster: resolved.centeredMaster,
+            masterRatio: resolved.masterRatio
         )
     }
 
@@ -1352,14 +1413,18 @@ final class WMController {
         defaultSplitRatio: CGFloat? = nil,
         splitWidthMultiplier: CGFloat? = nil,
         singleWindowFit: SingleWindowFit? = nil,
-        innerGap: CGFloat? = nil
+        innerGap: CGFloat? = nil,
+        centeredMaster: Bool? = nil,
+        masterRatio: CGFloat? = nil
     ) {
         dwindleLayoutHandler.updateDwindleConfig(
             smartSplit: smartSplit,
             defaultSplitRatio: defaultSplitRatio,
             splitWidthMultiplier: splitWidthMultiplier,
             singleWindowFit: singleWindowFit,
-            innerGap: innerGap
+            innerGap: innerGap,
+            centeredMaster: centeredMaster,
+            masterRatio: masterRatio
         )
     }
 
@@ -1397,22 +1462,6 @@ final class WMController {
                 }
             }
         }
-    }
-
-    private func handleRuntimeInvalidation(
-        workspaceId: WorkspaceDescriptor.ID?,
-        domains: InvalidationDomain,
-        surfaceScope: SessionSurfaceInvalidationScope
-    ) {
-        switch surfaceScope {
-        case .full:
-            surfaceReconciler.noteWorldChanged()
-        case .border:
-            surfaceReconciler.noteBorderChanged()
-        }
-        guard domains.contains(.workspace) || domains.contains(.fullscreen) else { return }
-        guard runtimeFrameJobCancellationSuppressionDepth == 0 else { return }
-        cancelPendingFrameJobsForInvalidation(workspaceId: workspaceId)
     }
 
     func withRuntimeFrameJobCancellationSuppressed<T>(_ body: () throws -> T) rethrows -> T {
@@ -3923,5 +3972,27 @@ final class WMController {
 
     func runningAppsForRulePicker() -> [RunningAppInfo] {
         RunningAppInventory.rulePickerCandidates(trackedApplications: runningAppsWithWindows())
+    }
+}
+
+extension WMController {
+    private func handleRuntimeInvalidation(
+        workspaceId: WorkspaceDescriptor.ID?,
+        domains: InvalidationDomain,
+        surfaceScope: SessionSurfaceInvalidationScope
+    ) {
+        // Focus acknowledgements do not change the slide's captured geometry.
+        if !domains.isDisjoint(with: [.workspace, .layout, .fullscreen]) {
+            workspaceSlideController.invalidate(workspaceId: workspaceId)
+        }
+        switch surfaceScope {
+        case .full:
+            surfaceReconciler.noteWorldChanged()
+        case .border:
+            surfaceReconciler.noteBorderChanged()
+        }
+        guard domains.contains(.workspace) || domains.contains(.fullscreen) else { return }
+        guard runtimeFrameJobCancellationSuppressionDepth == 0 else { return }
+        cancelPendingFrameJobsForInvalidation(workspaceId: workspaceId)
     }
 }

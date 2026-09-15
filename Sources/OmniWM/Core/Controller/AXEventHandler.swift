@@ -967,6 +967,7 @@ final class AXEventHandler {
 
     private func handleFrameChanged(windowId: UInt32) {
         guard let controller else { return }
+        guard !controller.workspaceSlideController.owns(windowId: Int(windowId)) else { return }
         guard !controller.isOwnedWindow(windowNumber: Int(windowId)) else { return }
         if let trackedEntry = controller.workspaceManager.entry(forWindowId: Int(windowId)),
            trackedEntry.mode == .tiling,

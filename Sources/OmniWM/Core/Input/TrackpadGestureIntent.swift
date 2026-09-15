@@ -17,7 +17,9 @@ enum TrackpadGestureIntent {
         var workspaceSwipeAxis: WorkspaceSwipeAxis
     }
 
-    static let workspaceSwipeTriggerUnits: CGFloat = 140.0
+    /// Fraction of the trackpad the fingers travel before a workspace swipe fires, unless configured.
+    static let defaultWorkspaceSwipeDistance: Double = 0.28
+    static let workspaceSwipeDistanceRange: ClosedRange<Double> = 0.08 ... 0.6
     static let workspaceSwipeReleaseVelocityFloor: Double = 800.0
 
     static func allowsGestureStart(_ config: Config, fingerCount: Int) -> Bool {

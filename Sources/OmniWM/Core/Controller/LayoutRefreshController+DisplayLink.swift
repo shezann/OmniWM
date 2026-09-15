@@ -52,12 +52,16 @@ extension LayoutRefreshController {
     }
 
     private func handleScreenParametersChanged() {
+        controller?.workspaceSlideController.cancel()
         detectRefreshRates()
         controller?.syncMonitorsToNiriEngine()
         controller?.surfaceReconciler.noteWorldChanged()
     }
 
     func cleanupForMonitorDisconnect(displayId: CGDirectDisplayID, migrateAnimations: Bool) {
+        if controller?.workspaceSlideController.hasDisplayLinkWork(displayId) == true {
+            controller?.workspaceSlideController.cancel()
+        }
         if let workspaceId = niriHandler.scrollAnimationByDisplay[displayId] {
             niriHandler.terminateViewportGesture(
                 for: workspaceId,
@@ -122,6 +126,7 @@ extension LayoutRefreshController {
         var closingEndTime: CFTimeInterval = 0
 
         SkyLight.shared.withTransactionScope {
+            controller?.workspaceSlideController.tick(at: displayLink.targetTimestamp, displayId: displayId)
             niriHandler.tickScrollAnimation(targetTime: displayLink.targetTimestamp, displayId: displayId)
             scrollEndTime = traceActive ? CACurrentMediaTime() : 0
             dwindleHandler.tickDwindleAnimation(targetTime: displayLink.targetTimestamp, displayId: displayId)
@@ -165,6 +170,17 @@ extension LayoutRefreshController {
                 classification: classification
             )
         )
+    }
+
+    func startWorkspaceSlideDisplayLink(for displayId: CGDirectDisplayID) -> Bool {
+        if displayLinkActivationForTests?(displayId) == true { return true }
+        guard let displayLink = getOrCreateDisplayLink(for: displayId) else { return false }
+        displayLink.add(to: .main, forMode: .common)
+        return true
+    }
+
+    func stopWorkspaceSlideDisplayLinkIfIdle(for displayId: CGDirectDisplayID) {
+        stopDisplayLinkIfIdle(for: displayId)
     }
 
     func startScrollAnimation(for workspaceId: WorkspaceDescriptor.ID, forGesture: Bool = false) {
@@ -355,6 +371,7 @@ extension LayoutRefreshController {
     }
 
     func resetDisplayLinkAndAnimationState() {
+        controller?.workspaceSlideController.cancel(requestRelayout: false)
         let niriWorkspaceIds = Set(niriHandler.scrollAnimationByDisplay.values)
         let removedDwindleState = dwindleHandler.removeAllAnimationState()
         for workspaceId in niriWorkspaceIds {
@@ -391,7 +408,8 @@ extension LayoutRefreshController {
         for displayId: CGDirectDisplayID,
         reason: DisplayLinkStopReason = .idle
     ) {
-        if niriHandler.scrollAnimationByDisplay[displayId] == nil,
+        if controller?.workspaceSlideController.hasDisplayLinkWork(displayId) != true,
+           niriHandler.scrollAnimationByDisplay[displayId] == nil,
            dwindleHandler.dwindleAnimationByDisplay[displayId] == nil,
            layoutState.closingAnimationsByDisplay[displayId].map({ $0.isEmpty }) ?? true
         {
@@ -422,7 +440,8 @@ extension LayoutRefreshController {
     }
 
     private func hasDisplayLinkWork(for displayId: CGDirectDisplayID) -> Bool {
-        niriHandler.scrollAnimationByDisplay[displayId] != nil
+        controller?.workspaceSlideController.hasDisplayLinkWork(displayId) == true
+            || niriHandler.scrollAnimationByDisplay[displayId] != nil
             || dwindleHandler.dwindleAnimationByDisplay[displayId] != nil
             || !(layoutState.closingAnimationsByDisplay[displayId]?.isEmpty ?? true)
     }

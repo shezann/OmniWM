@@ -60,6 +60,29 @@ final class MissionControlGestureProbeTests: XCTestCase {
         }
     }
 
+    func testHorizontalWarningFollowsFullScreenSwipeKeys() {
+        let fixture = Fixture()
+        fixture.set(NSNumber(value: 2), key: "TrackpadFourFingerHorizSwipeGesture", domain: builtInDomain)
+        fixture.set(NSNumber(value: 0), key: threeFingerKey, domain: builtInDomain)
+        fixture.set(NSNumber(value: 0), key: fourFingerKey, domain: builtInDomain)
+        let probe = fixture.makeProbe()
+
+        probe.refresh()
+
+        XCTAssertEqual(probe.fullScreenSwipeStatus, .enabled)
+        XCTAssertEqual(probe.status, .disabled)
+        XCTAssertTrue(probe.shouldWarn(axis: .horizontal, fingerCount: .four))
+        XCTAssertTrue(probe.shouldWarn(axis: .horizontal, fingerCount: .three))
+        XCTAssertFalse(probe.shouldWarn(axis: .horizontal, fingerCount: .two))
+        XCTAssertFalse(probe.shouldWarn(axis: .vertical, fingerCount: .four))
+
+        fixture.set(NSNumber(value: 0), key: "TrackpadFourFingerHorizSwipeGesture", domain: builtInDomain)
+        probe.refresh()
+
+        XCTAssertEqual(probe.fullScreenSwipeStatus, .disabled)
+        XCTAssertFalse(probe.shouldWarn(axis: .horizontal, fingerCount: .four))
+    }
+
     func testZeroFallbackDisablesWhenNoPositiveValueExists() {
         let fixture = Fixture()
         fixture.set(NSNumber(value: 0), key: threeFingerKey, domain: builtInDomain)

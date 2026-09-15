@@ -235,6 +235,39 @@ struct MonitorSettingsTab: View {
                 )
             }
 
+            Section("Front and Center") {
+                SettingsSliderRow(
+                    label: "Window Size",
+                    value: $settings.frontAndCenterSizeRatio,
+                    range: FrontAndCenterSettings.sizeRatioRange,
+                    step: FrontAndCenterSettings.sizeRatioStep,
+                    valueText: Self.percentText(settings.frontAndCenterSizeRatio),
+                    valueWidth: 64
+                )
+
+                if let monitor = selectedConnectedMonitor,
+                   let displayLabel = displayLabels[monitor.id]
+                {
+                    OverridableSlider(
+                        label: "\(displayLabel.name) Size",
+                        value: settings.frontAndCenterSettings(for: monitor)?.sizeRatio,
+                        globalValue: settings.frontAndCenterSizeRatio,
+                        range: FrontAndCenterSettings.sizeRatioRange,
+                        step: FrontAndCenterSettings.sizeRatioStep,
+                        formatter: Self.percentText,
+                        onChange: { value in updateFrontAndCenterSetting(for: monitor) { $0.sizeRatio = value } },
+                        onReset: { updateFrontAndCenterSetting(for: monitor) { $0.sizeRatio = nil } }
+                    )
+                }
+
+                SettingsCaption(
+                    "“Bring Focused Window Front and Center” (Option + Shift + F by default) floats the frontmost "
+                        + "app's window, sizes it to this share of the monitor under the pointer, centers it there, "
+                        + "and raises it, even while tiling is paused; press it again to put the window back. Select a "
+                        + "display in the arrangement above to give it its own size."
+                )
+            }
+
             Section("Monitor Orientation") {
                 if let monitor = selectedConnectedMonitor,
                    let displayLabel = displayLabels[monitor.id]
@@ -273,6 +306,23 @@ struct MonitorSettingsTab: View {
                 onSkip: { isMonitorSetupPresented = false }
             )
         }
+    }
+
+    private static func percentText(_ ratio: Double) -> String {
+        "\(Int((ratio * 100).rounded())) %"
+    }
+
+    private func updateFrontAndCenterSetting(
+        for monitor: Monitor,
+        _ mutate: (inout MonitorFrontAndCenterSettings) -> Void
+    ) {
+        var current = settings.frontAndCenterSettings(for: monitor) ?? MonitorFrontAndCenterSettings(
+            monitorName: monitor.name,
+            monitorDisplayUUID: monitor.displayUUID,
+            monitorDisplayId: monitor.displayId
+        )
+        mutate(&current)
+        settings.updateFrontAndCenterSettings(current, for: monitor)
     }
 
     private func presentRequestedMonitorSetupIfNeeded() {

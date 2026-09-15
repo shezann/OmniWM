@@ -59,6 +59,30 @@ private struct GlobalDwindleSettingsSection: View {
             Toggle("Move to Root: Stable", isOn: $settings.dwindleMoveToRootStable)
             SettingsCaption("Keep window on same screen side when moving to root")
 
+            Toggle("Centered Master", isOn: $settings.dwindleCenteredMaster)
+                .onChange(of: settings.dwindleCenteredMaster) { _, newValue in
+                    controller.updateDwindleConfig(centeredMaster: newValue)
+                }
+            SettingsCaption(
+                "Keep one master window in the center with the other windows stacked on the left and right. "
+                    + "Bind Swap with Master under Hotkeys to move the focused window into the center."
+            )
+
+            SettingsSliderRow(
+                label: "Master Width",
+                value: $settings.dwindleMasterRatio,
+                range: Double(DwindleSettings.masterRatioRange.lowerBound)
+                    ... Double(DwindleSettings.masterRatioRange.upperBound),
+                step: 0.05,
+                valueText: String(format: "%.0f%%", settings.dwindleMasterRatio * 100),
+                valueWidth: 44
+            )
+            .disabled(!settings.dwindleCenteredMaster)
+            .onChange(of: settings.dwindleMasterRatio) { _, newValue in
+                controller.updateDwindleConfig(masterRatio: CGFloat(newValue))
+            }
+            SettingsCaption("Share of the width the master window takes; the side stacks split the rest")
+
             SettingsSliderRow(
                 label: "Default Split Ratio",
                 value: $settings.dwindleDefaultSplitRatio,

@@ -12,6 +12,7 @@ extension LayoutRefreshController {
 
     func repairWorkspaceInactivePark(for entry: WindowState, observedFrame: CGRect) {
         guard let controller,
+              !controller.workspaceSlideController.owns(entry.workspaceId),
               entry.layoutReason == .standard,
               let verifiedFrame = controller.axManager.verifiedParkFrame(for: entry.windowId),
               abs(observedFrame.minX - verifiedFrame.minX) >= FrameTolerance.frameWrite

@@ -33,7 +33,14 @@ build:
 
 run:
 	./Scripts/package-app.sh debug dev
-	-pkill -x OmniWM
+	@# Wait for the old instance to exit before relaunching; calling `open`
+	@# while the previous process is still tearing down makes LaunchServices
+	@# fail with error -600 (procNotFound).
+	@if pgrep -x OmniWM >/dev/null; then \
+		pkill -x OmniWM; \
+		for _ in $$(seq 1 50); do pgrep -x OmniWM >/dev/null || break; sleep 0.2; done; \
+		if pgrep -x OmniWM >/dev/null; then echo "OmniWM did not exit; forcing"; pkill -9 -x OmniWM; sleep 0.5; fi; \
+	fi
 	open ./dist/OmniWM.app
 
 energy-profile:

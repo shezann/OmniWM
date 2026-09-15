@@ -202,6 +202,9 @@ final class HotkeyCenter {
     private var handler: EventHandlerRef?
     private var isRunning = false
     private var commandHotkeysSuspended = false
+    /// When set, only these commands stay registered. Used while window management is paused so
+    /// the resume shortcut keeps working while every other hotkey is released to macOS.
+    private var commandAllowlist: Set<HotkeyCommand>?
     private var idToRegistration: [UInt32: HotkeyPlannedRegistration] = [:]
     private var pressedHotKeyIds: Set<UInt32> = []
 
@@ -343,6 +346,22 @@ final class HotkeyCenter {
         }
     }
 
+    func setCommandAllowlist(_ allowlist: Set<HotkeyCommand>?) {
+        guard commandAllowlist != allowlist else { return }
+        commandAllowlist = allowlist
+        if isRunning {
+            refreshCommandHotkeyRegistrations()
+        }
+    }
+
+    nonisolated static func bindings(
+        _ bindings: [HotkeyBinding],
+        allowing allowlist: Set<HotkeyCommand>?
+    ) -> [HotkeyBinding] {
+        guard let allowlist else { return bindings }
+        return bindings.filter { allowlist.contains($0.command) }
+    }
+
     func updateBindings(
         _ newBindings: [HotkeyBinding],
         systemHyperTrigger newSystemHyperTrigger: SystemHyperTrigger = .default,
@@ -405,7 +424,7 @@ final class HotkeyCenter {
 
     private func refreshCommandHotkeyRegistrations() {
         unregisterCommandHotkeys()
-        let plan = Self.registrationPlan(for: configuration.bindings)
+        let plan = Self.registrationPlan(for: Self.bindings(configuration.bindings, allowing: commandAllowlist))
         registrationFailures = plan.failures
 
         guard !commandHotkeysSuspended else {

@@ -59,6 +59,7 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 | Toggle Quake Terminal | `` Option + ` `` | `Shared` |
 | Toggle Overview | `Option + Shift + O` | `Shared` |
 | Toggle System Stats | `Unassigned` | `Shared` |
+| Toggle Window Management | `Unassigned` | `Shared` |
 
 ## Move Window
 
@@ -95,6 +96,7 @@ The window-to-monitor actions send the focused window directly to the current wo
 | Move to Root | `Unassigned` | `Dwindle` |
 | Toggle Split | `Unassigned` | `Dwindle` |
 | Swap Split | `Unassigned` | `Dwindle` |
+| Swap with Master | `Unassigned` | `Dwindle` |
 | Grow Horizontally / Vertically | `Unassigned` | `Dwindle` |
 | Shrink Horizontally / Vertically | `Unassigned` | `Dwindle` |
 | Grow / Shrink Focused Window | `Unassigned` | `Dwindle` |
@@ -102,6 +104,7 @@ The window-to-monitor actions send the focused window directly to the current wo
 | Clear Preselection | `Unassigned` | `Dwindle` |
 | Raise All Floating Windows | `Option + Shift + R` | `Shared` |
 | Rescue Off-Screen Floating Windows | `Unassigned` | `Shared` |
+| Bring Focused Window Front and Center | `Option + Shift + F` | `Shared` |
 | Toggle Focused Window Floating | `Unassigned` | `Shared` |
 | Assign Focused Window to Scratchpad 1-10 | `Unassigned` | `Shared` |
 | Toggle Scratchpad 1-10 | `Unassigned` | `Shared` |
@@ -114,7 +117,7 @@ The window-to-monitor actions send the focused window directly to the current wo
 | Move Container Left / Right | `Control + Option + Shift + Left / Right Arrow` | `Shared` |
 | Move Container Up / Down | `Unassigned` | `Dwindle` |
 | Toggle Column Tabbed | `Option + T` | `Niri` |
-| Toggle Container Full Primary Span | `Option + Shift + F` | `Niri` |
+| Toggle Container Full Primary Span | `Unassigned` | `Niri` |
 | Expand Container to Available Primary Span | `Control + Option + F` | `Niri` |
 | Move Column to First / Last | `Control + Option + Home / End` | `Niri` |
 | Move Column to Index 1-9 | `Unassigned` | `Niri` |

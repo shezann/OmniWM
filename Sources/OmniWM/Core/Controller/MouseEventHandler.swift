@@ -238,7 +238,8 @@ final class MouseEventHandler {
         var lockedGestureContext: LockedGestureContext?
         var activeGestureMode: TrackpadGestureMode?
         var viewportGestureSessionID: AnimationDriver.GestureSessionID?
-        var workspaceSwipeFired = false
+        var workspaceSlideStarted = false
+        var workspaceSlideUnavailable = false
         let workspaceSwipeTracker = SwipeTracker()
         var suppressGestureStartUntilAllTouchesLift = false
         var consumeTrackpadScrollUntilAllTouchesLift = false
@@ -413,6 +414,7 @@ final class MouseEventHandler {
     }
 
     func cleanup() {
+        controller?.workspaceSlideController.cancel(requestRelayout: false)
         state.latestFocusFollowsMouseSample = nil
         clearNativeTitleBarDrag()
         cancelActiveMouseInteraction()
@@ -524,6 +526,7 @@ final class MouseEventHandler {
     }
 
     func resetForMultitouchSourceReplacement() {
+        controller?.workspaceSlideController.cancel()
         resetGestureState()
         state.workspaceSwipeTracker.reset()
         clearGestureLatches()
@@ -742,6 +745,7 @@ final class MouseEventHandler {
         modifiers: CGEventFlags,
         button: MouseButton = .left
     ) -> Bool {
+        controller?.workspaceSlideController.cancel()
         if shouldBlockOwnWindowInput(at: location) {
             dropPendingTapEvents()
         } else {
@@ -2103,7 +2107,7 @@ final class MouseEventHandler {
     }
 
     private func handleFocusFollowsMouse(at location: CGPoint, windowIdUnderPointer: Int?) {
-        guard let controller else { return }
+        guard let controller, !controller.workspaceSlideController.isActive else { return }
         guard controller.focusPolicyEngine.evaluate(.focusFollowsMouse).allowsFocusChange else {
             return
         }
@@ -2389,6 +2393,7 @@ final class MouseEventHandler {
         average: CGPoint,
         timestamp: TimeInterval
     ) {
+        controller?.workspaceSlideController.prepareForNewGesture()
         guard let context = resolveGestureArmContext(at: location, fingerCount: activeTouchCount) else { return }
         state.lockedGestureContext = context
         if context.workspaceAxis != nil {
@@ -2579,21 +2584,31 @@ final class MouseEventHandler {
         }
     }
 
+    /// Release distance threshold, in gesture units; the full slide spans twice this distance.
+    private var workspaceSwipeTriggerUnits: CGFloat {
+        let distance = controller?.settings.workspaceSwipeDistance
+            ?? TrackpadGestureIntent.defaultWorkspaceSwipeDistance
+        return CGFloat(distance) * macNormalizedTouchPositionToNiriGestureUnits
+    }
+
     private func handleWorkspaceSwipeFrame(
         axis: WorkspaceSwipeAxis,
         cumulative: CGFloat,
         monitorId: Monitor.ID
     ) {
-        guard !state.workspaceSwipeFired,
-              abs(cumulative) >= TrackpadGestureIntent.workspaceSwipeTriggerUnits,
-              let isNext = TrackpadGestureIntent.isNextWorkspace(
-                  axis: axis,
-                  displacement: cumulative,
-                  naturalDirection: controller?.settings.gestureInvertDirection ?? true
-              )
-        else { return }
-        state.workspaceSwipeFired = true
-        controller?.workspaceNavigationHandler.switchWorkspaceRelative(isNext: isNext, monitorId: monitorId)
+        guard let controller, let context = state.lockedGestureContext else { return }
+        if !state.workspaceSlideStarted {
+            state.workspaceSlideStarted = true
+            guard controller.workspaceSlideController.begin(
+                source: context.workspaceId, monitorId: monitorId, axis: axis,
+                naturalDirection: controller.settings.workspaceSwipeInvertDirection,
+                triggerDistance: workspaceSwipeTriggerUnits
+            ) else {
+                state.workspaceSlideUnavailable = true
+                return
+            }
+        }
+        controller.workspaceSlideController.update(displacement: cumulative)
     }
 
     private func finishCommittedGestureOnRelease(timestamp: TimeInterval, allowFlick: Bool) {
@@ -2630,24 +2645,29 @@ final class MouseEventHandler {
         timestamp: TimeInterval
     ) {
         defer { state.suppressTrackpadMomentumScroll = true }
-        guard allowFlick, !state.workspaceSwipeFired else { return }
         state.workspaceSwipeTracker.push(delta: 0, timestamp: timestamp)
-        let cumulative = (axis == .horizontal
-            ? state.gestureLastAverageX - state.gestureStartX
-            : state.gestureLastAverageY - state.gestureStartY)
-            * macNormalizedTouchPositionToNiriGestureUnits
-        guard let displacement = TrackpadGestureIntent.releaseFlickDisplacement(
-            cumulativeAxisUnits: cumulative,
-            velocity: state.workspaceSwipeTracker.velocity()
-        ),
-            let isNext = TrackpadGestureIntent.isNextWorkspace(
+        if state.workspaceSlideUnavailable, allowFlick {
+            let cumulative = (axis == .horizontal
+                ? state.gestureLastAverageX - state.gestureStartX
+                : state.gestureLastAverageY - state.gestureStartY) * macNormalizedTouchPositionToNiriGestureUnits
+            let displacement = abs(cumulative) >= workspaceSwipeTriggerUnits ? cumulative
+                : TrackpadGestureIntent.releaseFlickDisplacement(
+                    cumulativeAxisUnits: cumulative,
+                    velocity: state.workspaceSwipeTracker.velocity()
+                )
+            if let displacement, let next = TrackpadGestureIntent.isNextWorkspace(
                 axis: axis,
                 displacement: displacement,
-                naturalDirection: controller?.settings.gestureInvertDirection ?? true
-            )
-        else { return }
-        state.workspaceSwipeFired = true
-        controller?.workspaceNavigationHandler.switchWorkspaceRelative(isNext: isNext, monitorId: monitorId)
+                naturalDirection: controller?.settings
+                    .workspaceSwipeInvertDirection ??
+                    true
+            ) {
+                controller?.workspaceNavigationHandler.switchWorkspaceRelative(isNext: next, monitorId: monitorId)
+            }
+        }
+        controller?.workspaceSlideController.release(
+            velocity: state.workspaceSwipeTracker.velocity(), cancelled: !allowFlick
+        )
     }
 
     func applyTrackpadViewportScrollDelta(
@@ -2907,6 +2927,7 @@ final class MouseEventHandler {
     }
 
     private func resetGestureState(settleViewportGesture: Bool = true) {
+        controller?.workspaceSlideController.cancelInteraction()
         if settleViewportGesture,
            let lockedContext = state.lockedGestureContext,
            controller?.workspaceManager.animationDriver.hasGesture(in: lockedContext.workspaceId) == true
@@ -2921,7 +2942,8 @@ final class MouseEventHandler {
         state.lockedGestureContext = nil
         state.activeGestureMode = nil
         state.viewportGestureSessionID = nil
-        state.workspaceSwipeFired = false
+        state.workspaceSlideStarted = false
+        state.workspaceSlideUnavailable = false
     }
 
     private func currentSelectionNode(

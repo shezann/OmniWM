@@ -94,6 +94,7 @@ enum HotkeyCommand: Codable, Equatable, Hashable {
     case moveToRoot
     case toggleSplit
     case swapSplit
+    case swapWithMaster
     case resizeAlongAxis(DwindleOrientation, Bool)
     case resizeFocusedWindow(Bool)
     case preselect(Direction)
@@ -118,6 +119,8 @@ enum HotkeyCommand: Codable, Equatable, Hashable {
     case toggleWorkspaceLayout
     case toggleOverview
     case toggleSystemStats
+    case toggleWindowManagement
+    case bringFocusedWindowFrontAndCenter
 
     var displayName: String {
         ActionCatalog.title(for: self) ?? String(describing: self)

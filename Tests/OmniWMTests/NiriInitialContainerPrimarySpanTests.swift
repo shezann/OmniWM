@@ -311,6 +311,17 @@ final class NiriInitialContainerPrimarySpanTests: XCTestCase {
     @MainActor
     func testHandlerSeedsAdmissionWidthBeforeFirstConstraintResolutionAndLeavesLiveStateUntouched() throws {
         let controller = makeController()
+        // Keep the quarter-width seed below the 700-point minimum regardless of the host display.
+        controller.workspaceManager.applyMonitorConfigurationChange([
+            Monitor(
+                id: .init(displayId: 9001),
+                displayId: 9001,
+                frame: CGRect(x: 0, y: 0, width: 1280, height: 800),
+                visibleFrame: CGRect(x: 0, y: 0, width: 1280, height: 800),
+                hasNotch: false,
+                name: "Admission width test"
+            )
+        ])
         let workspaceId = try XCTUnwrap(
             controller.workspaceManager.workspaceId(for: "1", createIfMissing: true)
         )

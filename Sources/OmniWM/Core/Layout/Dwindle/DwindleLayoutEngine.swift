@@ -13,6 +13,11 @@ final class DwindleWorkspaceState {
     var selectedNodeId: DwindleNodeId?
     var preselection: Direction?
     var pendingMovementFrameSeeds: [WindowToken: CGRect] = [:]
+    /// Centered-master ordering: the first tile is the master, the rest are stack members in
+    /// insertion order. Empty while centered master is off.
+    var masterOrder: [DwindleTileId] = []
+    /// The master ratio the tree was last shaped with, so a settings change re-applies ratios once.
+    var appliedMasterRatio: CGFloat?
 }
 
 final class DwindleLayoutEngine {
@@ -47,6 +52,10 @@ final class DwindleLayoutEngine {
 
     func root(for workspaceId: WorkspaceDescriptor.ID) -> DwindleNode? {
         states[workspaceId]?.root
+    }
+
+    func workspaceState(for workspaceId: WorkspaceDescriptor.ID) -> DwindleWorkspaceState? {
+        states[workspaceId]
     }
 
     func ensureState(for workspaceId: WorkspaceDescriptor.ID) -> DwindleWorkspaceState {
@@ -326,6 +335,7 @@ final class DwindleLayoutEngine {
             state.leafByToken[token] = state.root
             state.tileCount = 1
             state.selectedNodeId = state.root.id
+            reconcileCenteredMaster(state: state, in: workspaceId)
             return state.root
         }
 
@@ -347,6 +357,7 @@ final class DwindleLayoutEngine {
 
         state.leafByToken[token] = newLeaf
         state.selectedNodeId = newLeaf.id
+        reconcileCenteredMaster(state: state, in: workspaceId)
         return newLeaf
     }
 
@@ -481,6 +492,7 @@ final class DwindleLayoutEngine {
             state.tileCount -= 1
             cleanupAfterRemoval(leaf, state: state)
         }
+        reconcileCenteredMaster(state: state, in: workspaceId)
         state.pendingMovementFrameSeeds.removeValue(forKey: token)
         if state.leafByToken.isEmpty {
             state.selectedNodeId = nil
@@ -662,6 +674,7 @@ final class DwindleLayoutEngine {
         if state.pendingMovementFrameSeeds[token] == nil {
             state.pendingMovementFrameSeeds[token] = movementFrameSeed
         }
+        reconcileCenteredMaster(state: state, in: workspaceId)
         return true
     }
 
@@ -707,6 +720,7 @@ final class DwindleLayoutEngine {
         if state.pendingMovementFrameSeeds[token] == nil {
             state.pendingMovementFrameSeeds[token] = movementFrameSeed
         }
+        reconcileCenteredMaster(state: state, in: workspaceId)
         return true
     }
 
@@ -882,6 +896,7 @@ final class DwindleLayoutEngine {
 
         if let state = states[workspaceId] {
             reconcileProjectedSelection(preferredToken: focusedToken, in: state)
+            reconcileCenteredMaster(state: state, in: workspaceId)
         }
 
         return toRemove
@@ -2052,6 +2067,11 @@ final class DwindleLayoutEngine {
         }
         for member in neighborTile.members {
             state.leafByToken[member.token] = current
+        }
+        if let currentOrderIndex = state.masterOrder.firstIndex(of: currentTile.id),
+           let neighborOrderIndex = state.masterOrder.firstIndex(of: neighborTile.id)
+        {
+            state.masterOrder.swapAt(currentOrderIndex, neighborOrderIndex)
         }
         if state.pendingMovementFrameSeeds[currentTile.activeToken] == nil,
            let currentMovementFrameSeed

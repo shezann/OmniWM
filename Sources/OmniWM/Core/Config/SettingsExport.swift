@@ -97,9 +97,14 @@ struct SettingsExport: Equatable {
     var dwindleSingleWindowFit: SingleWindowFit
     var dwindleUseGlobalGaps: Bool
     var dwindleMoveToRootStable: Bool
+    var dwindleCenteredMaster: Bool
+    var dwindleMasterRatio: Double
     var monitorDwindleSettings: [MonitorDwindleSettings]
 
     var monitorGapSettings: [MonitorGapSettings]
+
+    var frontAndCenterSizeRatio: Double
+    var monitorFrontAndCenterSettings: [MonitorFrontAndCenterSettings]
 
     var preventSleepEnabled: Bool
     var updateChecksEnabled: Bool
@@ -115,6 +120,9 @@ struct SettingsExport: Equatable {
     var workspaceSwipeEnabled: Bool
     var workspaceSwipeFingerCount: GestureFingerCount
     var workspaceSwipeAxis: WorkspaceSwipeAxis
+    var workspaceSwipeInvertDirection: Bool
+    var workspaceSwipeDisablesSystemGesture: Bool
+    var workspaceSwipeDistance: Double
     var statusBarShowWorkspaceName: Bool
     var statusBarShowAppNames: Bool
     var statusBarUseWorkspaceId: Bool
@@ -222,8 +230,12 @@ extension SettingsExport {
             dwindleSingleWindowFit: .fullScreen,
             dwindleUseGlobalGaps: true,
             dwindleMoveToRootStable: true,
+            dwindleCenteredMaster: false,
+            dwindleMasterRatio: Double(DwindleSettings.defaultMasterRatio),
             monitorDwindleSettings: [],
             monitorGapSettings: [],
+            frontAndCenterSizeRatio: FrontAndCenterSettings.defaultSizeRatio,
+            monitorFrontAndCenterSettings: [],
             preventSleepEnabled: false,
             updateChecksEnabled: true,
             ipcEnabled: false,
@@ -238,6 +250,9 @@ extension SettingsExport {
             workspaceSwipeEnabled: false,
             workspaceSwipeFingerCount: .three,
             workspaceSwipeAxis: .vertical,
+            workspaceSwipeInvertDirection: true,
+            workspaceSwipeDisablesSystemGesture: false,
+            workspaceSwipeDistance: TrackpadGestureIntent.defaultWorkspaceSwipeDistance,
             statusBarShowWorkspaceName: false,
             statusBarShowAppNames: false,
             statusBarUseWorkspaceId: false,

@@ -659,7 +659,7 @@ final class WorkspaceNavigationHandler {
     }
 
     @discardableResult
-    private func activateWorkspaceInOrder(
+    func activateWorkspaceInOrder(
         _ targetWorkspace: WorkspaceDescriptor,
         from currentWorkspaceId: WorkspaceDescriptor.ID,
         on monitorId: Monitor.ID

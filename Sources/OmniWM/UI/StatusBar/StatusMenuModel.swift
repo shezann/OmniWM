@@ -6,6 +6,7 @@ import Observation
 import SwiftUI
 
 enum StatusMenuControlPreview: Equatable {
+    case windowManagement
     case focusedWindow
     case workspaceBar
     case keepAwake
@@ -19,6 +20,7 @@ enum StatusMenuControlPreview: Equatable {
 }
 
 enum StatusMenuControl: String, CaseIterable, Identifiable {
+    case windowManagementEnabled
     case bordersEnabled
     case workspaceBarEnabled
     case preventSleepEnabled
@@ -36,6 +38,8 @@ enum StatusMenuControl: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
+        case .windowManagementEnabled:
+            "pause.circle"
         case .bordersEnabled:
             "square.dashed"
         case .workspaceBarEnabled:
@@ -61,6 +65,8 @@ enum StatusMenuControl: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .windowManagementEnabled:
+            "Tiling"
         case .bordersEnabled:
             "Borders"
         case .workspaceBarEnabled:
@@ -86,6 +92,8 @@ enum StatusMenuControl: String, CaseIterable, Identifiable {
 
     var accessibilityName: String {
         switch self {
+        case .windowManagementEnabled:
+            "Window Management"
         case .bordersEnabled:
             "Window Borders"
         case .workspaceBarEnabled:
@@ -111,6 +119,8 @@ enum StatusMenuControl: String, CaseIterable, Identifiable {
 
     var explanation: String {
         switch self {
+        case .windowManagementEnabled:
+            "Tiles and tracks your windows. Turn it off to pause OmniWM and hand every window back to macOS where it sits; turn it on to snap them back into their layouts. Bind Toggle Window Management in Settings > Hotkeys for a one-key switch."
         case .bordersEnabled:
             "Shows a colored outline around the currently focused managed window. Customize its appearance in Settings."
         case .workspaceBarEnabled:
@@ -136,6 +146,8 @@ enum StatusMenuControl: String, CaseIterable, Identifiable {
 
     var preview: StatusMenuControlPreview {
         switch self {
+        case .windowManagementEnabled:
+            .windowManagement
         case .bordersEnabled:
             .focusedWindow
         case .workspaceBarEnabled:
@@ -252,6 +264,13 @@ final class StatusMenuModel {
         let settings = settings
         weak let controller = controller
         var tiles: [ToggleTileSpec] = [
+            ToggleTileSpec(
+                control: .windowManagementEnabled,
+                isOn: Binding(
+                    get: { controller?.isWindowManagementPaused == false },
+                    set: { controller?.setWindowManagementPaused(!$0) }
+                )
+            ),
             ToggleTileSpec(
                 control: .bordersEnabled,
                 isOn: Binding(

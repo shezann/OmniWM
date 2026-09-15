@@ -101,30 +101,51 @@ struct MouseTrackpadSettingsTab: View {
             }
             .disabled(!settings.workspaceSwipeEnabled || settings.workspaceSwipeAxisLockedToVertical)
 
+            Toggle("Invert Direction (Natural)", isOn: $settings.workspaceSwipeInvertDirection)
+                .disabled(!settings.workspaceSwipeEnabled)
+
             SettingsCaption(workspaceSwipeCaption)
 
-            if missionControlGestureProbe.shouldWarn(
-                axis: settings.effectiveWorkspaceSwipeAxis,
-                fingerCount: settings.workspaceSwipeFingerCount
-            ) {
+            SettingsSliderRow(
+                label: "Swipe Distance",
+                value: $settings.workspaceSwipeDistance,
+                range: SettingsStore.workspaceSwipeDistanceRange,
+                step: 0.01,
+                valueText: "\(Int((settings.workspaceSwipeDistance * 100).rounded()))%"
+            )
+            .disabled(!settings.workspaceSwipeEnabled)
+
+            SettingsCaption(
+                "How far across the trackpad the fingers travel before the workspace switches. A quick flick switches sooner."
+            )
+
+            Toggle("Turn Off Conflicting macOS Gesture", isOn: $settings.workspaceSwipeDisablesSystemGesture)
+                .disabled(!settings.workspaceSwipeEnabled)
+
+            SettingsCaption(systemGestureCaption)
+
+            if !settings.workspaceSwipeDisablesSystemGesture,
+               missionControlGestureProbe.shouldWarn(
+                   axis: settings.effectiveWorkspaceSwipeAxis,
+                   fingerCount: settings.workspaceSwipeFingerCount
+               )
+            {
                 VStack(alignment: .leading, spacing: 6) {
                     Label {
-                        Text("Mission Control gesture conflict")
+                        Text("\(conflictingSystemGestureName) gesture conflict")
                     } icon: {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                     }
 
-                    Text(
-                        "Mission Control’s three- or four-finger upward swipe can intercept vertical workspace swipes. Turn off Mission Control in  → System Settings → Trackpad → More Gestures before enabling vertical workspace swipes."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text(systemGestureConflictWarning)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     Button("Open Trackpad Settings", action: missionControlGestureProbe.openTrackpadSettings)
                         .controlSize(.small)
                         .accessibilityHint(
-                            "Opens System Settings. Select More Gestures, then turn off Mission Control."
+                            "Opens System Settings. Select More Gestures, then turn off \(conflictingSystemGestureName)."
                         )
                 }
             }
@@ -134,11 +155,11 @@ struct MouseTrackpadSettingsTab: View {
     private var trackpadDirectionSection: some View {
         Section("Trackpad Direction") {
             Toggle("Invert Direction (Natural)", isOn: $settings.gestureInvertDirection)
-                .disabled(!settings.scrollGestureEnabled && !settings.workspaceSwipeEnabled)
+                .disabled(!settings.scrollGestureEnabled)
 
             SettingsCaption(settings.gestureInvertDirection
-                ? "Affects both Niri column scrolling and workspace swipes. Swipe right = scroll right."
-                : "Affects both Niri column scrolling and workspace swipes. Swipe right = scroll left.")
+                ? "Affects Niri column scrolling only. Swipe right = scroll right."
+                : "Affects Niri column scrolling only. Swipe right = scroll left.")
         }
     }
 
@@ -186,6 +207,34 @@ struct MouseTrackpadSettingsTab: View {
         }
     }
 
+    private var conflictingSystemGestureGroup: SystemSwipeGestureGroup {
+        settings.effectiveWorkspaceSwipeAxis == .horizontal ? .fullScreenAppSwipe : .missionControl
+    }
+
+    private var conflictingSystemGestureName: String {
+        conflictingSystemGestureGroup.displayName
+    }
+
+    private var systemGestureCaption: String {
+        guard settings.workspaceSwipeFingerCount != .two else {
+            return "Two-finger swipes have no matching macOS gesture to turn off."
+        }
+        return "While workspace swipe is on, OmniWM turns off \(conflictingSystemGestureName) in macOS"
+            + " and turns it back on when workspace swipe is off or OmniWM quits."
+    }
+
+    private var systemGestureConflictWarning: String {
+        let intercept = switch settings.effectiveWorkspaceSwipeAxis {
+        case .vertical:
+            "Mission Control’s three- or four-finger upward swipe can intercept vertical workspace swipes."
+        case .horizontal:
+            "The three- or four-finger swipe between full-screen applications can intercept horizontal"
+                + " workspace swipes."
+        }
+        return intercept + " Turn on “Turn Off Conflicting macOS Gesture” above, or turn off"
+            + " \(conflictingSystemGestureName) in System Settings → Trackpad → More Gestures."
+    }
+
     private var workspaceSwipeAxisSelection: Binding<WorkspaceSwipeAxis> {
         Binding(
             get: { settings.effectiveWorkspaceSwipeAxis },
@@ -194,7 +243,7 @@ struct MouseTrackpadSettingsTab: View {
     }
 
     private var workspaceSwipeCaption: String {
-        let natural = settings.gestureInvertDirection
+        let natural = settings.workspaceSwipeInvertDirection
         let hint = switch settings.effectiveWorkspaceSwipeAxis {
         case .horizontal:
             natural ? "Swipe left = next workspace, right = previous" : "Swipe right = next workspace, left = previous"

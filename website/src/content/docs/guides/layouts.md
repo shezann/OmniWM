@@ -17,6 +17,10 @@ On monitors using horizontal orientation, windows form vertical columns that scr
 
 A binary space partition layout that recursively divides screen space. Each new window splits the space in half, and a tile can group multiple windows as tabs. Best for traditional tiling with predictable layouts.
 
+### Centered Master
+
+Turn on **Centered Master** in **Settings > Dwindle Layout** to keep one master window in the center of a Dwindle workspace while the other windows stack in a left and a right column. New windows alternate sides starting on the right, closing the master promotes the first stacked window, and **Master Width** sets the master's share of the width (`dwindle.masterRatio` in `settings.toml`). Bind **Swap with Master** under **Settings > Hotkeys** to move the focused window into the center; pressed on the master, it swaps with the first stacked window. Split, resize, and move operations keep working, and the centered shape is re-applied whenever a window opens or closes.
+
 ## Floating windows
 
 Windows can also float above the tiled layout in either engine:

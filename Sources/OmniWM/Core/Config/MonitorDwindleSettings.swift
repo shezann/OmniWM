@@ -89,4 +89,6 @@ struct ResolvedDwindleSettings: Equatable {
     let singleWindowFit: SingleWindowFit
     let useGlobalGaps: Bool
     let innerGap: CGFloat
+    let centeredMaster: Bool
+    let masterRatio: CGFloat
 }

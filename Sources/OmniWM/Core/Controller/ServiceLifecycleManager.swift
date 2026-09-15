@@ -251,6 +251,7 @@ final class ServiceLifecycleManager {
         }
         guard !controller.hasStartedServices,
               controller.desiredEnabled,
+              !controller.isWindowManagementPaused,
               currentAccessibilityPermissionGranted()
         else { return }
         startServices()

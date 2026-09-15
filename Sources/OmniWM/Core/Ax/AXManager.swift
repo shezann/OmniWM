@@ -238,6 +238,7 @@ final class AXManager {
 
     /// Window IDs belonging to inactive workspaces — checked LIVE in applyFramesParallel.
     private(set) var inactiveWorkspaceWindowIds: Set<Int> = []
+    private(set) var workspaceSlideTokens: Set<WindowToken> = []
     private(set) var macOSHiddenAppPIDs: Set<pid_t> = []
 
     private var skyLightLivePositionByWindowId: [Int: CGPoint] = [:]
@@ -887,6 +888,7 @@ final class AXManager {
 
         cancelAllPendingFrameState()
         frameLedger.invalidateAllAppliedFrames()
+        workspaceSlideTokens.removeAll()
         skyLightLivePositionByWindowId.removeAll(keepingCapacity: true)
         for state in managedWindowBindingRetryStateByPID.values {
             state.task?.cancel()
@@ -2087,6 +2089,32 @@ final class AXManager {
         )
     }
 
+    /// The slide owns these windows until landing. Ordinary layout/parking writes must
+    /// not replace its positions, but its own writes may reach inactive workspaces.
+    func beginWorkspaceSlideFrameWrites(_ tokens: [WindowToken]) {
+        workspaceSlideTokens.formUnion(tokens)
+        unsuppressFrameWrites(tokens.map { ($0.pid, $0.windowId) })
+    }
+
+    func endWorkspaceSlideFrameWrites(_ tokens: [WindowToken]) {
+        workspaceSlideTokens.subtract(tokens)
+    }
+
+    @discardableResult
+    func applyWorkspaceSlidePositions(_ frames: [AXFrameApplicationTarget]) -> Bool {
+        let writable = frames.filter {
+            workspaceSlideTokens.contains(WindowToken(pid: $0.pid, windowId: $0.windowId))
+                && !macOSHiddenAppPIDs.contains($0.pid)
+                && !excludeFrameWriteForNativeTitleBarDrag(pid: $0.pid, windowId: $0.windowId)
+        }
+        guard writable.count == frames.count,
+              writable.allSatisfy({ hasContext(for: $0.pid) }) else { return false }
+        enqueueFrameApplications(
+            writable, isRetry: false, verify: false, workspaceSlide: true
+        )
+        return true
+    }
+
     private func applyWritableFramesParallel(
         _ writable: [AXFrameApplicationTarget],
         terminalObserver: FrameApplicationTerminalObserver? = nil,
@@ -2124,6 +2152,7 @@ final class AXManager {
         _ frames: [AXFrameApplicationTarget]
     ) -> [AXFrameApplicationTarget] {
         guard !macOSHiddenAppPIDs.isEmpty
+            || !workspaceSlideTokens.isEmpty
             || nativeTitleBarDrag != nil
         else { return frames }
         return frames.filter { isFrameAllowedToWrite($0) }
@@ -2131,6 +2160,7 @@ final class AXManager {
 
     private func isFrameAllowedToWrite(_ target: AXFrameApplicationTarget) -> Bool {
         !macOSHiddenAppPIDs.contains(target.pid)
+            && !workspaceSlideTokens.contains(WindowToken(pid: target.pid, windowId: target.windowId))
             && !excludeFrameWriteForNativeTitleBarDrag(
                 pid: target.pid,
                 windowId: target.windowId
@@ -2446,7 +2476,8 @@ final class AXManager {
         isRetry: Bool,
         verify: Bool = true,
         terminalObserver: FrameApplicationTerminalObserver? = nil,
-        parentTraceRequestId: UInt64 = 0
+        parentTraceRequestId: UInt64 = 0,
+        workspaceSlide: Bool = false
     ) {
         if frameApplicationBufferInUse {
             var framesByPid: [pid_t: [AXFrameApplicationRequest]] = [:]
@@ -2457,6 +2488,7 @@ final class AXManager {
                 verify: verify,
                 terminalObserver: terminalObserver,
                 parentTraceRequestId: parentTraceRequestId,
+                workspaceSlide: workspaceSlide,
                 framesByPid: &framesByPid
             )
             return
@@ -2476,6 +2508,7 @@ final class AXManager {
             verify: verify,
             terminalObserver: terminalObserver,
             parentTraceRequestId: parentTraceRequestId,
+            workspaceSlide: workspaceSlide,
             framesByPid: &framesByPidBuffer
         )
     }
@@ -2486,6 +2519,7 @@ final class AXManager {
         verify: Bool,
         terminalObserver: FrameApplicationTerminalObserver?,
         parentTraceRequestId: UInt64,
+        workspaceSlide: Bool,
         framesByPid: inout [pid_t: [AXFrameApplicationRequest]]
     ) {
         framesByPid.reserveCapacity(min(frames.count, 8))
@@ -2501,7 +2535,10 @@ final class AXManager {
             let pid = target.pid
             let windowId = target.windowId
             let frame = target.frame
-            if inactiveWorkspaceWindowIds.contains(windowId) {
+            if !workspaceSlide,
+               inactiveWorkspaceWindowIds.contains(windowId)
+               || workspaceSlideTokens.contains(WindowToken(pid: pid, windowId: windowId))
+            {
                 continue
             }
             let decision = frameLedger.prepareFrameApplication(

@@ -167,6 +167,7 @@ Workspace IDs are global, so `switch-workspace 3` targets workspace `3` wherever
 | `command move-to-root` | — | dwindle | Move the selected window to the root split |
 | `command toggle-split` | — | dwindle | Toggle the active split orientation |
 | `command swap-split` | — | dwindle | Swap the active split |
+| `command swap-with-master` | — | dwindle | Swap the focused window with the centered master (needs `dwindle.centeredMaster`); on the master, swaps with the first stacked window |
 | `command resize` | `<horizontal\|vertical> <grow\|shrink>` | dwindle | Grow or shrink the selected window along an axis |
 | `command resize-focused` | `<grow\|shrink>` | dwindle | Grow or shrink the focused window |
 | `command preselect` | `<left\|right\|up\|down>` | dwindle | Set the preselection direction |
@@ -180,6 +181,9 @@ Workspace IDs are global, so `switch-workspace 3` targets workspace `3` wherever
 | `command cycle-size forward` | — | shared | Cycle layout sizing presets forward (in Dwindle the focused window takes 30, 50, or 70 % of its split) |
 | `command cycle-size backward` | — | shared | Cycle layout sizing presets backward (in Dwindle the focused window takes 70, 50, or 30 % of its split) |
 | `command toggle-workspace-layout` | — | shared | Toggle the workspace between Niri and Dwindle |
+| `command pause-window-management` | — | shared | Pause window management: windows stay where they are, parked windows return on screen, and `no_change` is returned when already paused |
+| `command resume-window-management` | — | shared | Resume window management and re-apply the remembered layouts; `no_change` when already running |
+| `command toggle-window-management` | — | shared | Pause or resume window management. These three commands and `bring-focused-window-front-and-center` are accepted while paused, unlike every other command |
 | `command set-workspace-layout` | `<default\|niri\|dwindle>` | shared | Set the workspace layout explicitly |
 | `command toggle-fullscreen` | — | shared | Toggle OmniWM-managed fullscreen |
 | `command toggle-native-fullscreen` | — | shared | Toggle native macOS fullscreen |
@@ -192,6 +196,7 @@ Workspace IDs are global, so `switch-workspace 3` targets workspace `3` wherever
 | `command close-focused-window` | — | shared | Close the focused managed window through its close button; returns `window_action_failed` when the window has no close button or refuses the press |
 | `command raise-all-floating-windows` | — | shared | Raise all visible floating windows |
 | `command rescue-offscreen-windows` | — | shared | Clamp tracked floating windows back onto their visible monitors |
+| `command bring-focused-window-front-and-center` | — | shared | Float the frontmost app's focused window, size it to the configured share of the monitor under the pointer, center it there, and raise it. Run it again on that window to put it back (a tiled window rejoins the layout, a floating one returns to its previous spot). Accepted while window management is paused; returns `window_action_failed` when the window refuses the frame |
 | `command scratchpad assign <number>` | — | shared | Assign the focused window to scratchpad 1-10, or remove it when already there |
 | `command scratchpad toggle <number>` | — | shared | Show or hide the windows in scratchpad 1-10 |
 

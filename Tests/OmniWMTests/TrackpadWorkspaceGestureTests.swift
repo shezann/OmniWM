@@ -59,6 +59,7 @@ final class TrackpadWorkspaceGestureTests: XCTestCase {
             windowFocusOperations: windowFocusOperations
         )
         controller.layoutRefreshController.displayLinkActivationForTests = { _ in true }
+        controller.workspaceSlideController.presentForTests = { _, _ in true }
         controller.settings.scrollGestureEnabled = scrollGestureEnabled
         controller.settings.gestureFingerCount = columnFingers
         controller.settings.workspaceSwipeEnabled = workspaceSwipeEnabled
@@ -226,6 +227,14 @@ final class TrackpadWorkspaceGestureTests: XCTestCase {
             touches: phase == .ended || phase == .cancelled ? [] : touches(fingers, x: x, y: y)
         )
         fixture.controller.mouseEventHandler.receiveTapGestureEvent(snapshot)
+        // These tests exercise gesture routing; explicitly finish the presentation spring.
+        if fixture.controller.workspaceSlideController.session?.spring != nil {
+            fixture.controller.workspaceSlideController.tick(
+                at: CACurrentMediaTime() + 10,
+                displayId: fixture.controller.workspaceSlideController
+                    .session!.monitor.displayId
+            )
+        }
     }
 
     private func performVerticalSwipe(
@@ -272,11 +281,58 @@ final class TrackpadWorkspaceGestureTests: XCTestCase {
         XCTAssertEqual(activeWorkspace(fixture), lastWorkspace)
     }
 
-    func testInvertedDirectionFlipsVerticalMapping() throws {
+    func testInvertedWorkspaceSwipeDirectionFlipsVerticalMapping() throws {
         let fixture = try makeFixture()
-        fixture.controller.settings.gestureInvertDirection = false
+        fixture.controller.settings.workspaceSwipeInvertDirection = false
         let lastWorkspace = fixture.controller.workspaceManager.workspaces(on: fixture.monitor.id).last?.id
         _ = performVerticalSwipe(fixture, totalUnits: 220, startTime: 100)
+        XCTAssertEqual(activeWorkspace(fixture), lastWorkspace)
+    }
+
+    func testWorkspaceSwipeInvertDirectionIsIndependentOfColumnScrollInvert() throws {
+        let fixture = try makeFixture()
+        let lastWorkspace = fixture.controller.workspaceManager.workspaces(on: fixture.monitor.id).last?.id
+
+        fixture.controller.settings.gestureInvertDirection = true
+        fixture.controller.settings.workspaceSwipeInvertDirection = false
+        _ = performVerticalSwipe(fixture, totalUnits: 220, startTime: 100)
+        XCTAssertEqual(activeWorkspace(fixture), lastWorkspace)
+
+        XCTAssertTrue(fixture.controller.workspaceManager.setActiveWorkspace(fixture.ws1, on: fixture.monitor.id))
+        fixture.controller.settings.gestureInvertDirection = false
+        fixture.controller.settings.workspaceSwipeInvertDirection = true
+        _ = performVerticalSwipe(fixture, totalUnits: 220, startTime: 200)
+        XCTAssertEqual(activeWorkspace(fixture), fixture.ws2)
+    }
+
+    func testNonNaturalHorizontalSwipeRightIsNextAndLeftIsPrevious() throws {
+        let fixture = try makeFixture(
+            workspaceFingers: .four,
+            workspaceAxis: .horizontal,
+            scrollGestureEnabled: true
+        )
+        fixture.controller.settings.workspaceSwipeInvertDirection = false
+        let lastWorkspace = fixture.controller.workspaceManager.workspaces(on: fixture.monitor.id).last?.id
+
+        var time: TimeInterval = 100
+        sendFrame(fixture, phase: .began, fingers: 4, x: 0.2, y: 0.5, at: time)
+        for step in 1 ... 8 {
+            time += 0.01
+            sendFrame(fixture, phase: .changed, fingers: 4, x: 0.2 + 0.055 * CGFloat(step), y: 0.5, at: time)
+        }
+        time += 0.01
+        sendFrame(fixture, phase: .ended, fingers: 0, x: 0, y: 0, at: time)
+        XCTAssertEqual(activeWorkspace(fixture), fixture.ws2)
+
+        XCTAssertTrue(fixture.controller.workspaceManager.setActiveWorkspace(fixture.ws1, on: fixture.monitor.id))
+        time = 200
+        sendFrame(fixture, phase: .began, fingers: 4, x: 0.8, y: 0.5, at: time)
+        for step in 1 ... 8 {
+            time += 0.01
+            sendFrame(fixture, phase: .changed, fingers: 4, x: 0.8 - 0.055 * CGFloat(step), y: 0.5, at: time)
+        }
+        time += 0.01
+        sendFrame(fixture, phase: .ended, fingers: 0, x: 0, y: 0, at: time)
         XCTAssertEqual(activeWorkspace(fixture), lastWorkspace)
     }
 
@@ -295,6 +351,35 @@ final class TrackpadWorkspaceGestureTests: XCTestCase {
         time += 0.005
         sendFrame(fixture, phase: .ended, fingers: 0, x: 0, y: 0, at: time)
         XCTAssertEqual(activeWorkspace(fixture), fixture.ws1)
+    }
+
+    func testShorterSwipeDistanceSettingSwitchesOnSlowDrag() throws {
+        let fixture = try makeFixture()
+        fixture.controller.settings.workspaceSwipeDistance = 0.1
+        var time: TimeInterval = 100
+        sendFrame(fixture, phase: .began, fingers: 3, x: 0.5, y: 0.2, at: time)
+        for step in 1 ... 5 {
+            time += 0.02
+            sendFrame(fixture, phase: .changed, fingers: 3, x: 0.5, y: 0.2 + 0.024 * CGFloat(step), at: time)
+        }
+        for _ in 0 ..< 10 {
+            time += 0.01
+            sendFrame(fixture, phase: .changed, fingers: 3, x: 0.5, y: 0.32, at: time)
+        }
+        time += 0.005
+        sendFrame(fixture, phase: .ended, fingers: 0, x: 0, y: 0, at: time)
+        XCTAssertEqual(activeWorkspace(fixture), fixture.ws2)
+    }
+
+    func testSwipeDistanceSettingIsClampedToSupportedRange() throws {
+        let fixture = try makeFixture()
+        let range = SettingsStore.workspaceSwipeDistanceRange
+        fixture.controller.settings.workspaceSwipeDistance = 5
+        XCTAssertEqual(fixture.controller.settings.workspaceSwipeDistance, range.upperBound)
+        fixture.controller.settings.workspaceSwipeDistance = 0
+        XCTAssertEqual(fixture.controller.settings.workspaceSwipeDistance, range.lowerBound)
+        fixture.controller.settings.workspaceSwipeDistance = .nan
+        XCTAssertEqual(fixture.controller.settings.workspaceSwipeDistance, 0.28)
     }
 
     func testFastFlickBelowDistanceThresholdSwitchesOnRelease() throws {
@@ -982,7 +1067,7 @@ final class TrackpadWorkspaceGestureTests: XCTestCase {
         }
         XCTAssertTrue(fixture.controller.mouseEventHandler.isTrackpadSwipeSessionActive)
         XCTAssertFalse(fixture.controller.mouseEventHandler.isViewportGestureActive)
-        XCTAssertEqual(activeWorkspace(fixture), fixture.ws2)
+        XCTAssertEqual(activeWorkspace(fixture), fixture.ws1)
         time += 0.01
         sendFrame(fixture, phase: .ended, fingers: 0, x: 0, y: 0, at: time)
         XCTAssertEqual(activeWorkspace(fixture), fixture.ws2)
@@ -1279,6 +1364,10 @@ final class TrackpadWorkspaceGestureTests: XCTestCase {
             location: location
         )
 
+        fixture.controller.workspaceSlideController.tick(
+            at: CACurrentMediaTime() + 10,
+            displayId: fixture.monitor.displayId
+        )
         XCTAssertEqual(activeWorkspace(fixture), fixture.ws2)
         XCTAssertTrue(fixture.controller.mouseEventHandler.multitouchDiagnosticsSnapshot?.state == .running)
         await cleanupRecoveringMultitouchSource(fixture, harness: harness)

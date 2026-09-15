@@ -370,6 +370,7 @@ import QuartzCore
         var plans: [WorkspaceLayoutPlan] = []
         let workspaceIds = activeWorkspaces.sorted(by: { $0.uuidString < $1.uuidString })
         for wsId in workspaceIds {
+            guard !controller.workspaceSlideController.owns(wsId) else { continue }
             guard let workspace = controller.workspaceManager.descriptor(for: wsId),
                   let monitor = controller.workspaceManager.monitor(for: wsId)
             else { continue }
@@ -1335,7 +1336,9 @@ import QuartzCore
         defaultSplitRatio: CGFloat? = nil,
         splitWidthMultiplier: CGFloat? = nil,
         singleWindowFit: SingleWindowFit? = nil,
-        innerGap: CGFloat? = nil
+        innerGap: CGFloat? = nil,
+        centeredMaster: Bool? = nil,
+        masterRatio: CGFloat? = nil
     ) {
         guard let controller, let engine = controller.dwindleEngine else { return }
         controller.workspaceManager.withEngineMutationScope {
@@ -1344,6 +1347,8 @@ import QuartzCore
             if let v = splitWidthMultiplier { engine.settings.splitWidthMultiplier = v }
             if let v = singleWindowFit { engine.settings.singleWindowFit = v }
             if let v = innerGap { engine.settings.innerGap = v }
+            if let v = centeredMaster { engine.settings.centeredMaster = v }
+            if let v = masterRatio { engine.settings.masterRatio = v }
         }
         controller.workspaceManager.invalidateAllLayouts()
         controller.layoutRefreshController.requestRelayout(reason: .layoutConfigChanged)
@@ -1732,6 +1737,8 @@ import QuartzCore
         engine.settings.splitWidthMultiplier = settings.splitWidthMultiplier
         engine.settings.singleWindowFit = settings.singleWindowFit
         engine.settings.innerGap = settings.innerGap
+        engine.settings.centeredMaster = settings.centeredMaster
+        engine.settings.masterRatio = settings.masterRatio
         engine.tabRailWidth = TabRailManager.tabIndicatorWidth
     }
 

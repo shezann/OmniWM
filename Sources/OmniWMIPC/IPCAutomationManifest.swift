@@ -853,6 +853,27 @@ public enum IPCAutomationManifest {
             layoutCompatibility: .dwindle
         ),
         command(
+            ["swap-with-master"],
+            name: .swapWithMaster,
+            summary: "Swap the focused Dwindle window with the centered master; requires Centered Master.",
+            layoutCompatibility: .dwindle
+        ),
+        command(
+            ["pause-window-management"],
+            name: .pauseWindowManagement,
+            summary: "Pause window management, handing every window back to macOS where it sits."
+        ),
+        command(
+            ["resume-window-management"],
+            name: .resumeWindowManagement,
+            summary: "Resume window management and re-apply the remembered layouts."
+        ),
+        command(
+            ["toggle-window-management"],
+            name: .toggleWindowManagement,
+            summary: "Pause or resume window management."
+        ),
+        command(
             ["resize"],
             name: .resize,
             summary: "Resize the selected Dwindle window.",
@@ -889,6 +910,12 @@ public enum IPCAutomationManifest {
             ["rescue-offscreen-windows"],
             name: .rescueOffscreenWindows,
             summary: "Clamp tracked floating windows back onto their visible monitors."
+        ),
+        command(
+            ["bring-focused-window-front-and-center"],
+            name: .bringFocusedWindowFrontAndCenter,
+            summary: "Float the frontmost app's window, size it to the configured share of the monitor under the "
+                + "pointer, center it there, and raise it; a second call puts it back. Also accepted while paused."
         ),
         command(
             ["toggle-focused-window-floating"],

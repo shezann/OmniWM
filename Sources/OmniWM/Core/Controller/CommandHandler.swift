@@ -19,6 +19,20 @@ final class CommandHandler {
     @discardableResult
     func handleHotkeyInvocation(_ invocation: HotkeyInvocation) -> ExternalCommandResult {
         guard let controller else { return .notFound }
+        // The pause toggle is the one command that must keep working while paused.
+        if invocation.command == .toggleWindowManagement {
+            guard invocation.trigger?.isRepeat != true else { return .executed }
+            controller.toggleWindowManagementPaused()
+            return .executed
+        }
+        // Front and Center is the escape hatch for a lost window, so it also runs while paused or
+        // otherwise disabled; a held key must not keep re-centering the window.
+        if invocation.command == .bringFocusedWindowFrontAndCenter {
+            guard invocation.trigger?.isRepeat != true else { return .executed }
+            if !controller.isEnabled {
+                return controller.bringFocusedWindowFrontAndCenter()
+            }
+        }
         guard controller.isEnabled else { return .ignoredDisabled }
         if invocation.command == .toggleOverview, invocation.trigger?.isRepeat == true {
             return .executed
@@ -36,6 +50,13 @@ final class CommandHandler {
     @discardableResult
     func performCommand(_ command: HotkeyCommand) -> ExternalCommandResult {
         guard let controller else { return .notFound }
+        if command == .toggleWindowManagement {
+            controller.toggleWindowManagementPaused()
+            return .executed
+        }
+        if command == .bringFocusedWindowFrontAndCenter, !controller.isEnabled {
+            return controller.bringFocusedWindowFrontAndCenter()
+        }
         guard controller.isEnabled else { return .ignoredDisabled }
         guard !Self.shouldIgnoreCommand(command, isOverviewOpen: controller.isOverviewOpen()) else {
             return .ignoredOverview
@@ -192,6 +213,8 @@ final class CommandHandler {
             toggleSplitInDwindle()
         case .swapSplit:
             swapSplitInDwindle()
+        case .swapWithMaster:
+            swapWithMasterInDwindle()
         case let .resizeAlongAxis(orientation, grow):
             resizeAlongAxisInDwindle(orientation: orientation, grow: grow)
         case let .resizeFocusedWindow(grow):
@@ -208,6 +231,8 @@ final class CommandHandler {
             controller.raiseAllFloatingWindows()
         case .rescueOffscreenWindows:
             _ = controller.rescueOffscreenWindows()
+        case .bringFocusedWindowFrontAndCenter:
+            return controller.bringFocusedWindowFrontAndCenter()
         case .toggleFocusedWindowFloating:
             return controller.toggleFocusedWindowFloating()
         case .closeFocusedWindow:
@@ -232,6 +257,8 @@ final class CommandHandler {
             controller.toggleOverview()
         case .toggleSystemStats:
             controller.toggleSystemStats()
+        case .toggleWindowManagement:
+            controller.toggleWindowManagementPaused()
         }
 
         return .executed
@@ -889,6 +916,18 @@ final class CommandHandler {
         controller.dwindleLayoutHandler.withDwindleContext { engine, wsId in
             if engine.swapSplit(in: wsId) {
                 controller.dwindleLayoutHandler.recordLayoutOperation(.splitSwapped, in: wsId)
+            }
+            controller.layoutRefreshController.requestLayoutCommandRelayout(
+                affectedWorkspaceIds: [wsId]
+            )
+        }
+    }
+
+    private func swapWithMasterInDwindle() {
+        guard let controller else { return }
+        controller.dwindleLayoutHandler.withDwindleContext { engine, wsId in
+            if engine.swapSelectionWithMaster(in: wsId) {
+                controller.dwindleLayoutHandler.recordLayoutOperation(.windowSwappedWithMaster, in: wsId)
             }
             controller.layoutRefreshController.requestLayoutCommandRelayout(
                 affectedWorkspaceIds: [wsId]

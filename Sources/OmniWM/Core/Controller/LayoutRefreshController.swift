@@ -233,7 +233,7 @@ import QuartzCore
         _ plan: WorkspaceLayoutPlan,
         suppressWindowActivation: Bool = false
     ) -> AcceptedSeq? {
-        guard let controller else { return nil }
+        guard let controller, !controller.workspaceSlideController.owns(plan.workspaceId) else { return nil }
         guard plan.sessionPatch.plannedSeq == 0
             || controller.workspaceManager.isSeqCurrent(
                 plan.sessionPatch.plannedSeq,
@@ -907,7 +907,7 @@ import QuartzCore
         return await executeEffectPlan(plan, generation: generation)
     }
 
-    func hideInactiveWorkspacesSync() {
+    func hideInactiveWorkspacesSync(restoredFrames: [WindowToken: CGRect] = [:]) {
         guard let controller else { return }
         var activeWorkspaceIds: Set<WorkspaceDescriptor.ID> = []
         for monitor in controller.workspaceManager.monitors {
@@ -915,7 +915,7 @@ import QuartzCore
                 activeWorkspaceIds.insert(workspace.id)
             }
         }
-        hideInactiveWorkspaces(activeWorkspaceIds: activeWorkspaceIds)
+        hideInactiveWorkspaces(activeWorkspaceIds: activeWorkspaceIds, restoredFrames: restoredFrames)
     }
 
     private func executeImmediateRelayout(refresh: ScheduledRefresh, generation: UInt64) async -> Bool {
@@ -988,6 +988,7 @@ import QuartzCore
     }
 
     private func executeFullRefresh(refresh: ScheduledRefresh, generation: UInt64) async throws -> Bool {
+        controller?.workspaceSlideController.cancel(requestRelayout: false)
         guard let controller else { return false }
         guard isCurrentRefreshGeneration(generation) else { return false }
 
@@ -2467,6 +2468,7 @@ import QuartzCore
     func hasWorkspaceInactiveFloatingWindows(activeWorkspaceIds: Set<WorkspaceDescriptor.ID>) -> Bool {
         guard let controller else { return false }
         for workspaceId in activeWorkspaceIds {
+            guard !controller.workspaceSlideController.owns(workspaceId) else { continue }
             guard let monitor = controller.workspaceManager.monitor(for: workspaceId) else { continue }
             for entry in controller.workspaceManager.floatingEntries(in: workspaceId)
                 where workspaceInactiveFloatingRestoreFrame(for: entry, monitor: monitor) != nil
@@ -2484,6 +2486,7 @@ import QuartzCore
         var visibleJobs: [(pid: pid_t, windowId: Int)] = []
 
         for workspaceId in activeWorkspaceIds {
+            guard !controller.workspaceSlideController.owns(workspaceId) else { continue }
             guard let monitor = controller.workspaceManager.monitor(for: workspaceId) else { continue }
             for entry in controller.workspaceManager.floatingEntries(in: workspaceId) {
                 guard let frame = workspaceInactiveFloatingRestoreFrame(for: entry, monitor: monitor) else { continue }
@@ -2518,7 +2521,10 @@ import QuartzCore
         return controller.workspaceManager.resolvedFloatingFrame(for: entry.token, preferredMonitor: monitor)
     }
 
-    func hideInactiveWorkspaces(activeWorkspaceIds: Set<WorkspaceDescriptor.ID>) {
+    func hideInactiveWorkspaces(
+        activeWorkspaceIds: Set<WorkspaceDescriptor.ID>,
+        restoredFrames: [WindowToken: CGRect] = [:]
+    ) {
         guard let controller else { return }
         let workspaceEntries = workspaceEntriesSnapshot(on: controller)
 
@@ -2543,7 +2549,9 @@ import QuartzCore
         // before the per-window hide loop, to prevent AX batch races with SkyLight moves.
         var inactiveWindowJobs: [(pid: pid_t, windowId: Int)] = []
         let hiddenPlacementMonitors = controller.workspaceManager.monitors.map(HiddenPlacementMonitorContext.init)
-        for snapshot in workspaceEntries where !activeWorkspaceIds.contains(snapshot.workspace.id) {
+        for snapshot in workspaceEntries where !activeWorkspaceIds.contains(snapshot.workspace.id)
+            && !controller.workspaceSlideController.owns(snapshot.workspace.id)
+        {
             for entry in snapshot.entries {
                 inactiveWindowJobs.append((entry.pid, entry.windowId))
             }
@@ -2553,14 +2561,17 @@ import QuartzCore
         }
 
         let preferredSides = preferredHideSides(for: controller.workspaceManager.monitors)
-        for snapshot in workspaceEntries where !activeWorkspaceIds.contains(snapshot.workspace.id) {
+        for snapshot in workspaceEntries where !activeWorkspaceIds.contains(snapshot.workspace.id)
+            && !controller.workspaceSlideController.owns(snapshot.workspace.id)
+        {
             guard let monitor = controller.workspaceManager.monitor(for: snapshot.workspace.id) else { continue }
             let preferredSide = preferredSides[monitor.id] ?? .right
             hideWorkspace(
                 snapshot.entries,
                 monitor: monitor,
                 preferredSide: preferredSide,
-                hiddenPlacementMonitors: hiddenPlacementMonitors
+                hiddenPlacementMonitors: hiddenPlacementMonitors,
+                restoredFrames: restoredFrames
             )
         }
     }
@@ -2569,7 +2580,8 @@ import QuartzCore
         _ entries: [WindowState],
         monitor: Monitor,
         preferredSide: HideSide,
-        hiddenPlacementMonitors: [HiddenPlacementMonitorContext]? = nil
+        hiddenPlacementMonitors: [HiddenPlacementMonitorContext]? = nil,
+        restoredFrames: [WindowToken: CGRect] = [:]
     ) {
         guard let controller else { return }
         for entry in entries {
@@ -2585,7 +2597,8 @@ import QuartzCore
                 monitor: monitor,
                 side: preferredSide,
                 reason: .workspaceInactive,
-                hiddenPlacementMonitors: hiddenPlacementMonitors
+                hiddenPlacementMonitors: hiddenPlacementMonitors,
+                observedFrame: restoredFrames[entry.token]
             )
         }
     }

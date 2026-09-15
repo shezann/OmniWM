@@ -173,6 +173,8 @@ final class IPCCommandRouter {
             return controller.commandHandler.performCommand(.toggleSplit)
         case .swapSplit:
             return controller.commandHandler.performCommand(.swapSplit)
+        case .swapWithMaster:
+            return controller.commandHandler.performCommand(.swapWithMaster)
         case let .resize(axis, operation):
             return controller.commandHandler.performCommand(
                 .resizeAlongAxis(dwindleOrientation(for: axis), operation == .grow)
@@ -189,8 +191,18 @@ final class IPCCommandRouter {
             return raiseAllFloatingWindows()
         case .rescueOffscreenWindows:
             return rescueOffscreenWindows()
+        case .bringFocusedWindowFrontAndCenter:
+            // Works while paused too: it is the escape hatch for a window that went missing.
+            return controller.bringFocusedWindowFrontAndCenter()
         case .toggleWorkspaceLayout:
             return controller.commandHandler.performCommand(.toggleWorkspaceLayout)
+        case .pauseWindowManagement:
+            return controller.setWindowManagementPaused(true) ? .executed : .noChange
+        case .resumeWindowManagement:
+            return controller.setWindowManagementPaused(false) ? .executed : .noChange
+        case .toggleWindowManagement:
+            controller.toggleWindowManagementPaused()
+            return .executed
         case let .setWorkspaceLayout(layout):
             if let guardResult = validateControllerState() {
                 return guardResult

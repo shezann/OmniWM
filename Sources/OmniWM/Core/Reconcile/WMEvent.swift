@@ -45,6 +45,7 @@ enum LayoutOperation: Equatable {
     case windowMovedInColumn(token: WindowToken)
     case windowMovedToRoot
     case windowMovedToWorkspace(token: WindowToken, to: WorkspaceDescriptor.ID)
+    case windowSwappedWithMaster
     case windowSizeChanged(token: WindowToken)
     case windowsSwapped
 
@@ -90,6 +91,8 @@ enum LayoutOperation: Equatable {
             "window_moved_to_root"
         case let .windowMovedToWorkspace(token, to):
             "window_moved_to_workspace token=\(token) to=\(to.uuidString)"
+        case .windowSwappedWithMaster:
+            "window_swapped_with_master"
         case let .windowSizeChanged(token):
             "window_size_changed token=\(token)"
         case .windowsSwapped:

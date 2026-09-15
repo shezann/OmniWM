@@ -10,6 +10,7 @@ final class StatusMenuControlHelpTests: XCTestCase {
     func testControlCatalogHasExactlyTheUniqueSettingIdentifiers() {
         let identifiers = StatusMenuControl.allCases.map(\.id)
         let expectedIdentifiers: Set<String> = [
+            "windowManagementEnabled",
             "bordersEnabled",
             "workspaceBarEnabled",
             "preventSleepEnabled",
@@ -39,6 +40,7 @@ final class StatusMenuControlHelpTests: XCTestCase {
 
     func testEveryControlHasTheExpectedPreview() {
         let expectedPreviews: [StatusMenuControl: StatusMenuControlPreview] = [
+            .windowManagementEnabled: .windowManagement,
             .bordersEnabled: .focusedWindow,
             .workspaceBarEnabled: .workspaceBar,
             .preventSleepEnabled: .keepAwake,

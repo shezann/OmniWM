@@ -30,6 +30,9 @@ struct CanonicalTOMLConfig: Codable, Equatable {
     var monitorNiriOverrides: [MonitorNiriSettings]
     var monitorDwindleOverrides: [MonitorDwindleSettings]
     var monitorGapOverrides: [MonitorGapSettings]
+    // Optional so settings files written before the Front and Center action existed keep loading.
+    var frontAndCenter: FrontAndCenter?
+    var monitorFrontAndCenterOverrides: [MonitorFrontAndCenterSettings]?
 
     struct General: Codable, Equatable {
         var hotkeysEnabled: Bool
@@ -97,6 +100,13 @@ struct CanonicalTOMLConfig: Codable, Equatable {
         var singleWindowFit: SingleWindowFit
         var useGlobalGaps: Bool
         var moveToRootStable: Bool
+        // Optional so settings files written before these keys existed keep loading.
+        var centeredMaster: Bool?
+        var masterRatio: Double?
+    }
+
+    struct FrontAndCenter: Codable, Equatable {
+        var sizeRatio: Double
     }
 
     struct Borders: Codable, Equatable {
@@ -208,6 +218,9 @@ struct CanonicalTOMLConfig: Codable, Equatable {
         var workspaceSwipeEnabled: Bool
         var workspaceSwipeFingerCount: GestureFingerCount
         var workspaceSwipeAxis: WorkspaceSwipeAxis
+        var workspaceSwipeInvertDirection: Bool?
+        var workspaceSwipeDisablesSystemGesture: Bool?
+        var workspaceSwipeDistance: Double?
     }
 
     struct StatusBar: Codable, Equatable {
@@ -282,6 +295,11 @@ extension CanonicalTOMLConfig {
         monitorNiriOverrides = try container.decode([MonitorNiriSettings].self, forKey: .monitorNiriOverrides)
         monitorDwindleOverrides = try container.decode([MonitorDwindleSettings].self, forKey: .monitorDwindleOverrides)
         monitorGapOverrides = try container.decode([MonitorGapSettings].self, forKey: .monitorGapOverrides)
+        frontAndCenter = try container.decodeIfPresent(FrontAndCenter.self, forKey: .frontAndCenter)
+        monitorFrontAndCenterOverrides = try container.decodeIfPresent(
+            [MonitorFrontAndCenterSettings].self,
+            forKey: .monitorFrontAndCenterOverrides
+        )
     }
 }
 
@@ -338,7 +356,9 @@ extension CanonicalTOMLConfig {
             splitWidthMultiplier: export.dwindleSplitWidthMultiplier,
             singleWindowFit: export.dwindleSingleWindowFit,
             useGlobalGaps: export.dwindleUseGlobalGaps,
-            moveToRootStable: export.dwindleMoveToRootStable
+            moveToRootStable: export.dwindleMoveToRootStable,
+            centeredMaster: export.dwindleCenteredMaster,
+            masterRatio: export.dwindleMasterRatio
         )
         borders = Borders(
             enabled: export.bordersEnabled,
@@ -394,7 +414,10 @@ extension CanonicalTOMLConfig {
             trackpadScrollStyle: export.trackpadScrollStyle,
             workspaceSwipeEnabled: export.workspaceSwipeEnabled,
             workspaceSwipeFingerCount: export.workspaceSwipeFingerCount,
-            workspaceSwipeAxis: export.workspaceSwipeAxis
+            workspaceSwipeAxis: export.workspaceSwipeAxis,
+            workspaceSwipeInvertDirection: export.workspaceSwipeInvertDirection,
+            workspaceSwipeDisablesSystemGesture: export.workspaceSwipeDisablesSystemGesture,
+            workspaceSwipeDistance: export.workspaceSwipeDistance
         )
         statusBar = StatusBar(
             showWorkspaceName: export.statusBarShowWorkspaceName,
@@ -434,6 +457,8 @@ extension CanonicalTOMLConfig {
         monitorNiriOverrides = export.monitorNiriSettings
         monitorDwindleOverrides = export.monitorDwindleSettings
         monitorGapOverrides = export.monitorGapSettings
+        frontAndCenter = FrontAndCenter(sizeRatio: export.frontAndCenterSizeRatio)
+        monitorFrontAndCenterOverrides = export.monitorFrontAndCenterSettings
     }
 
     func toSettingsExport() -> SettingsExport {
@@ -513,8 +538,12 @@ extension CanonicalTOMLConfig {
             dwindleSingleWindowFit: dwindle.singleWindowFit,
             dwindleUseGlobalGaps: dwindle.useGlobalGaps,
             dwindleMoveToRootStable: dwindle.moveToRootStable,
+            dwindleCenteredMaster: dwindle.centeredMaster ?? SettingsExport.defaults().dwindleCenteredMaster,
+            dwindleMasterRatio: dwindle.masterRatio ?? SettingsExport.defaults().dwindleMasterRatio,
             monitorDwindleSettings: monitorDwindleOverrides,
             monitorGapSettings: monitorGapOverrides,
+            frontAndCenterSizeRatio: frontAndCenter?.sizeRatio ?? FrontAndCenterSettings.defaultSizeRatio,
+            monitorFrontAndCenterSettings: monitorFrontAndCenterOverrides ?? [],
             preventSleepEnabled: general.preventSleepEnabled,
             updateChecksEnabled: general.updateChecksEnabled,
             ipcEnabled: general.ipcEnabled,
@@ -529,6 +558,10 @@ extension CanonicalTOMLConfig {
             workspaceSwipeEnabled: gestures.workspaceSwipeEnabled,
             workspaceSwipeFingerCount: gestures.workspaceSwipeFingerCount,
             workspaceSwipeAxis: gestures.workspaceSwipeAxis,
+            workspaceSwipeInvertDirection: gestures.workspaceSwipeInvertDirection ?? gestures.invertDirection,
+            workspaceSwipeDisablesSystemGesture: gestures.workspaceSwipeDisablesSystemGesture ?? false,
+            workspaceSwipeDistance: gestures.workspaceSwipeDistance
+                ?? TrackpadGestureIntent.defaultWorkspaceSwipeDistance,
             statusBarShowWorkspaceName: statusBar.showWorkspaceName,
             statusBarShowAppNames: statusBar.showAppNames,
             statusBarUseWorkspaceId: statusBar.useWorkspaceId,

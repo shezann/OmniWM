@@ -617,6 +617,8 @@ OmniWM offers two layout engines that you can switch between per workspace:
 
 **Hyprland Dwindle (BSP)** - Binary space partition layout that recursively divides screen space. Each new window splits the space in half, and a tile can group multiple windows as tabs. Best for traditional tiling with predictable layouts.
 
+Turn on **Centered Master** in Settings > Dwindle Layout to keep one master window in the center of a Dwindle workspace while the other windows stack in a left and a right column. New windows alternate sides starting on the right, closing the master promotes the first stacked window, and **Master Width** sets the master's share of the width. Bind **Swap with Master** in Settings > Hotkeys to move the focused window into the center; pressed on the master, it swaps with the first stacked window. Split, resize, and move operations keep working, and the centered shape is re-applied whenever a window opens or closes.
+
 Use the `Toggle Workspace Layout` shortcut below to switch layouts per workspace or configure them in GUI settings.
 
 ### Keyboard Shortcuts
@@ -667,6 +669,7 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 | Toggle Quake Terminal | `` Option + ` `` | `Shared` |
 | Toggle Overview | `Option + Shift + O` | `Shared` |
 | Toggle System Stats | `Unassigned` | `Shared` |
+| Toggle Window Management | `Unassigned` | `Shared` |
 
 #### Move Window
 
@@ -703,6 +706,7 @@ The window-to-monitor actions send the focused window directly to the current wo
 | Move to Root | `Unassigned` | `Dwindle` |
 | Toggle Split | `Unassigned` | `Dwindle` |
 | Swap Split | `Unassigned` | `Dwindle` |
+| Swap with Master | `Unassigned` | `Dwindle` |
 | Grow Horizontally / Vertically | `Unassigned` | `Dwindle` |
 | Shrink Horizontally / Vertically | `Unassigned` | `Dwindle` |
 | Grow / Shrink Focused Window | `Unassigned` | `Dwindle` |
@@ -710,6 +714,7 @@ The window-to-monitor actions send the focused window directly to the current wo
 | Clear Preselection | `Unassigned` | `Dwindle` |
 | Raise All Floating Windows | `Option + Shift + R` | `Shared` |
 | Rescue Off-Screen Floating Windows | `Unassigned` | `Shared` |
+| Bring Focused Window Front and Center | `Option + Shift + F` | `Shared` |
 | Toggle Focused Window Floating | `Unassigned` | `Shared` |
 | Assign Focused Window to Scratchpad 1-10 | `Unassigned` | `Shared` |
 | Toggle Scratchpad 1-10 | `Unassigned` | `Shared` |
@@ -722,7 +727,7 @@ The window-to-monitor actions send the focused window directly to the current wo
 | Move Container Left / Right | `Control + Option + Shift + Left / Right Arrow` | `Shared` |
 | Move Container Up / Down | `Unassigned` | `Dwindle` |
 | Toggle Column Tabbed | `Option + T` | `Niri` |
-| Toggle Container Full Primary Span | `Option + Shift + F` | `Niri` |
+| Toggle Container Full Primary Span | `Unassigned` | `Niri` |
 | Expand Container to Available Primary Span | `Control + Option + F` | `Niri` |
 | Move Column to First / Last | `Control + Option + Home / End` | `Niri` |
 | Move Column to Index 1-9 | `Unassigned` | `Niri` |
@@ -774,6 +779,24 @@ The unassigned advanced actions are available in Settings > Hotkeys. `Focus Down
 | Navigate Pane | `Cmd + Option + Arrow Keys` |
 
 ### Features
+
+#### Pause Window Management
+
+Switch tiling off for a moment without quitting OmniWM, then switch it back on:
+- Click the **Tiling** tile in the status bar menu, bind **Toggle Window Management** in Settings > Hotkeys, or run `omniwmctl command toggle-window-management` (`pause-window-management` and `resume-window-management` also exist for scripts)
+- Pausing hands every window back to macOS where it currently sits, brings windows parked for inactive workspaces back onto their monitor, and removes borders, tab rails, and the workspace bar. Scratchpad windows stay hidden
+- While paused, every other shortcut is released to macOS and the menu bar icon shows a pause glyph; only the Toggle Window Management and Bring Focused Window Front and Center shortcuts stay registered
+- Resuming re-applies the remembered layouts with one animation: windows you moved while paused snap back to their tiles, windows you opened are admitted normally, and inactive workspaces are parked again
+- The pause is never saved, so OmniWM always manages windows after a relaunch
+
+#### Find a Lost Window
+
+Bring back whichever window the frontmost app has focused, wherever it ended up:
+- Press **Option + Shift + F** (the **Bring Focused Window Front and Center** action, rebindable in Settings > Hotkeys) or run `omniwmctl command bring-focused-window-front-and-center`
+- The window is floated, sized to 70% of the monitor under the pointer, centered there, and raised on top. Windows parked for an inactive workspace, tucked into a scratchpad, minimized, hidden with their app, or sitting on another monitor are all pulled back
+- The size is a global slider under Settings > Monitors > Front and Center, with an optional override per display
+- Press it again to put the window back: a tiled window rejoins the layout of the workspace it is on now, a floating window returns to its previous spot. A window that went missing again in between is simply brought back once more
+- It also works while window management is paused by driving the window through Accessibility directly, where the second press restores the previous frame; resuming re-applies the remembered layout
 
 #### Quake Terminal
 
@@ -863,7 +886,7 @@ Conceal selected menu-bar icons and reach them from a panel:
 - **Mouse Resize** - Hold the configured right-mouse resize modifier (`Option` by default) and right-drag a tiled window to resize it in either layout
 - **Scroll Gestures (Mouse)** - Hold `Option + Shift + Mouse Scroll Wheel` (default, configurable) to scroll along the active Niri primary axis: left/right in horizontal orientation or up/down in vertical orientation
 - **Trackpad Gestures** - Use 2/3/4-finger gestures (configurable) along the active Niri primary axis; direction can be inverted (local hardware validation is limited)
-- **Workspace Swipe (Trackpad)** - Opt-in in Settings → Mouse & Trackpad: swipe with a configurable finger count (2/3/4) and axis (horizontal/vertical) to switch to the next/previous workspace on the monitor under the cursor, one switch per swipe; sharing the column-scroll finger count locks the axis to vertical. For vertical swipes with three or four fingers, first turn off Mission Control in  → System Settings → Trackpad → More Gestures so macOS does not intercept the gesture.
+- **Workspace Swipe (Trackpad)** - Opt-in in Settings → Mouse & Trackpad: swipe with a configurable finger count (2/3/4) and axis (horizontal/vertical) to switch to the next/previous workspace on the monitor under the cursor, one switch per swipe; sharing the column-scroll finger count locks the axis to vertical. Workspace windows slide live with your fingers. Release past the configured swipe distance (or flick) to spring to the neighbor; reverse or release short to spring back. Selection and focus change after the slide finishes. Movement uses the same Accessibility position updates as Niri scrolling, with pending window size changes applied at landing. macOS can constrain movement at display edges; windows are not compositor-clipped to one monitor during a swipe. Workspace swipes have their own natural-direction toggle, independent of column scrolling, so swiping right can go to the next workspace. For vertical swipes with three or four fingers, first turn off Mission Control in  → System Settings → Trackpad → More Gestures so macOS does not intercept the gesture. For horizontal swipes with three or four fingers, turn off Swipe between full-screen applications in the same place. Or enable Turn Off Conflicting macOS Gesture and OmniWM switches the conflicting macOS gesture off while workspace swipe is on and back on when it is off or OmniWM quits.
 
 ## Configuration
 

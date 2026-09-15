@@ -10,10 +10,16 @@ import OmniWMIPC
 final class SettingsStore {
     private nonisolated static let defaultExport = SettingsExport.defaults()
     private nonisolated static let scrollSensitivityRange = 0.1 ... 100.0
+    nonisolated static let workspaceSwipeDistanceRange = TrackpadGestureIntent.workspaceSwipeDistanceRange
 
     private nonisolated static func normalizedScrollSensitivity(_ value: Double) -> Double {
         guard value.isFinite else { return defaultExport.scrollSensitivity }
         return min(max(value, scrollSensitivityRange.lowerBound), scrollSensitivityRange.upperBound)
+    }
+
+    private nonisolated static func normalizedWorkspaceSwipeDistance(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultExport.workspaceSwipeDistance }
+        return min(max(value, workspaceSwipeDistanceRange.lowerBound), workspaceSwipeDistanceRange.upperBound)
     }
 
     private struct NormalizedWorkspaceBarIconOverride {
@@ -32,6 +38,7 @@ final class SettingsStore {
     var onExternalSettingsReloaded: (@MainActor () -> Void)?
     var onConfigNoticeChanged: (@MainActor () -> Void)?
     var onTrackpadGestureAvailabilityChanged: (@MainActor (Bool) -> Void)?
+    var onSystemSwipeGesturePolicyChanged: (@MainActor () -> Void)?
     private(set) var configNotice: SettingsConfigNotice?
 
     var hotkeysEnabled = SettingsStore.defaultExport.hotkeysEnabled {
@@ -421,11 +428,27 @@ final class SettingsStore {
         didSet { scheduleSave() }
     }
 
+    var dwindleCenteredMaster = SettingsStore.defaultExport.dwindleCenteredMaster {
+        didSet { scheduleSave() }
+    }
+
+    var dwindleMasterRatio = SettingsStore.defaultExport.dwindleMasterRatio {
+        didSet { scheduleSave() }
+    }
+
     var monitorDwindleSettings = SettingsStore.defaultExport.monitorDwindleSettings {
         didSet { scheduleSave() }
     }
 
     var monitorGapSettings = SettingsStore.defaultExport.monitorGapSettings {
+        didSet { scheduleSave() }
+    }
+
+    var frontAndCenterSizeRatio = SettingsStore.defaultExport.frontAndCenterSizeRatio {
+        didSet { scheduleSave() }
+    }
+
+    var monitorFrontAndCenterSettings = SettingsStore.defaultExport.monitorFrontAndCenterSettings {
         didSet { scheduleSave() }
     }
 
@@ -453,6 +476,7 @@ final class SettingsStore {
             {
                 onTrackpadGestureAvailabilityChanged?(scrollGestureEnabled || workspaceSwipeEnabled)
             }
+            notifySystemSwipeGesturePolicyChanged()
             scheduleSave()
         }
     }
@@ -481,7 +505,11 @@ final class SettingsStore {
     }
 
     var gestureFingerCount = SettingsStore.defaultExport.gestureFingerCount {
-        didSet { scheduleSave() }
+        didSet {
+            guard oldValue != gestureFingerCount else { return }
+            notifySystemSwipeGesturePolicyChanged()
+            scheduleSave()
+        }
     }
 
     var gestureInvertDirection = SettingsStore.defaultExport.gestureInvertDirection {
@@ -500,16 +528,48 @@ final class SettingsStore {
             {
                 onTrackpadGestureAvailabilityChanged?(scrollGestureEnabled || workspaceSwipeEnabled)
             }
+            notifySystemSwipeGesturePolicyChanged()
             scheduleSave()
         }
     }
 
     var workspaceSwipeFingerCount = SettingsStore.defaultExport.workspaceSwipeFingerCount {
-        didSet { scheduleSave() }
+        didSet {
+            guard oldValue != workspaceSwipeFingerCount else { return }
+            notifySystemSwipeGesturePolicyChanged()
+            scheduleSave()
+        }
     }
 
     var workspaceSwipeAxis = SettingsStore.defaultExport.workspaceSwipeAxis {
+        didSet {
+            guard oldValue != workspaceSwipeAxis else { return }
+            notifySystemSwipeGesturePolicyChanged()
+            scheduleSave()
+        }
+    }
+
+    var workspaceSwipeInvertDirection = SettingsStore.defaultExport.workspaceSwipeInvertDirection {
         didSet { scheduleSave() }
+    }
+
+    var workspaceSwipeDisablesSystemGesture = SettingsStore.defaultExport.workspaceSwipeDisablesSystemGesture {
+        didSet {
+            guard oldValue != workspaceSwipeDisablesSystemGesture else { return }
+            notifySystemSwipeGesturePolicyChanged()
+            scheduleSave()
+        }
+    }
+
+    var workspaceSwipeDistance = SettingsStore.defaultExport.workspaceSwipeDistance {
+        didSet {
+            let normalized = SettingsStore.normalizedWorkspaceSwipeDistance(workspaceSwipeDistance)
+            guard normalized == workspaceSwipeDistance else {
+                workspaceSwipeDistance = normalized
+                return
+            }
+            scheduleSave()
+        }
     }
 
     var workspaceSwipeAxisLockedToVertical: Bool {
@@ -518,6 +578,21 @@ final class SettingsStore {
 
     var effectiveWorkspaceSwipeAxis: WorkspaceSwipeAxis {
         workspaceSwipeAxisLockedToVertical ? .vertical : workspaceSwipeAxis
+    }
+
+    /// The macOS gesture OmniWM should hold off while workspace swipe is active, if any.
+    var managedSystemSwipeGestureGroup: SystemSwipeGestureGroup? {
+        SystemSwipeGesturePolicy.managedGroup(
+            workspaceSwipeEnabled: workspaceSwipeEnabled,
+            disablesSystemGesture: workspaceSwipeDisablesSystemGesture,
+            fingerCount: workspaceSwipeFingerCount,
+            axis: effectiveWorkspaceSwipeAxis
+        )
+    }
+
+    private func notifySystemSwipeGesturePolicyChanged() {
+        guard !isApplyingExport else { return }
+        onSystemSwipeGesturePolicyChanged?()
     }
 
     var statusBarShowWorkspaceName = SettingsStore.defaultExport.statusBarShowWorkspaceName {
@@ -820,8 +895,12 @@ final class SettingsStore {
             dwindleSingleWindowFit: dwindleSingleWindowFit,
             dwindleUseGlobalGaps: dwindleUseGlobalGaps,
             dwindleMoveToRootStable: dwindleMoveToRootStable,
+            dwindleCenteredMaster: dwindleCenteredMaster,
+            dwindleMasterRatio: dwindleMasterRatio,
             monitorDwindleSettings: monitorDwindleSettings,
             monitorGapSettings: monitorGapSettings.filter(\.hasOverrides),
+            frontAndCenterSizeRatio: frontAndCenterSizeRatio,
+            monitorFrontAndCenterSettings: monitorFrontAndCenterSettings.filter(\.hasOverrides),
             preventSleepEnabled: preventSleepEnabled,
             updateChecksEnabled: updateChecksEnabled,
             ipcEnabled: ipcEnabled,
@@ -836,6 +915,9 @@ final class SettingsStore {
             workspaceSwipeEnabled: workspaceSwipeEnabled,
             workspaceSwipeFingerCount: workspaceSwipeFingerCount,
             workspaceSwipeAxis: workspaceSwipeAxis,
+            workspaceSwipeInvertDirection: workspaceSwipeInvertDirection,
+            workspaceSwipeDisablesSystemGesture: workspaceSwipeDisablesSystemGesture,
+            workspaceSwipeDistance: workspaceSwipeDistance,
             statusBarShowWorkspaceName: statusBarShowWorkspaceName,
             statusBarShowAppNames: statusBarShowAppNames,
             statusBarUseWorkspaceId: statusBarUseWorkspaceId,
@@ -864,12 +946,16 @@ final class SettingsStore {
     func applyExport(_ export: SettingsExport) {
         let baseline = SettingsStore.defaultExport
         let trackpadGesturesWereAvailable = scrollGestureEnabled || workspaceSwipeEnabled
+        let managedSystemGestureBefore = managedSystemSwipeGestureGroup
         isApplyingExport = true
         defer {
             isApplyingExport = false
             let trackpadGesturesAreAvailable = scrollGestureEnabled || workspaceSwipeEnabled
             if trackpadGesturesWereAvailable != trackpadGesturesAreAvailable {
                 onTrackpadGestureAvailabilityChanged?(trackpadGesturesAreAvailable)
+            }
+            if managedSystemGestureBefore != managedSystemSwipeGestureGroup {
+                onSystemSwipeGesturePolicyChanged?()
             }
         }
 
@@ -981,8 +1067,12 @@ final class SettingsStore {
         dwindleSingleWindowFit = export.dwindleSingleWindowFit
         dwindleUseGlobalGaps = export.dwindleUseGlobalGaps
         dwindleMoveToRootStable = export.dwindleMoveToRootStable
+        dwindleCenteredMaster = export.dwindleCenteredMaster
+        dwindleMasterRatio = export.dwindleMasterRatio
         monitorDwindleSettings = export.monitorDwindleSettings
         monitorGapSettings = export.monitorGapSettings.filter(\.hasOverrides)
+        frontAndCenterSizeRatio = FrontAndCenterSettings.clampedSizeRatio(export.frontAndCenterSizeRatio)
+        monitorFrontAndCenterSettings = export.monitorFrontAndCenterSettings.filter(\.hasOverrides)
 
         preventSleepEnabled = export.preventSleepEnabled
         updateChecksEnabled = export.updateChecksEnabled
@@ -998,6 +1088,9 @@ final class SettingsStore {
         workspaceSwipeEnabled = export.workspaceSwipeEnabled
         workspaceSwipeFingerCount = export.workspaceSwipeFingerCount
         workspaceSwipeAxis = export.workspaceSwipeAxis
+        workspaceSwipeInvertDirection = export.workspaceSwipeInvertDirection
+        workspaceSwipeDisablesSystemGesture = export.workspaceSwipeDisablesSystemGesture
+        workspaceSwipeDistance = export.workspaceSwipeDistance
         statusBarShowWorkspaceName = export.statusBarShowWorkspaceName
         statusBarShowAppNames = export.statusBarShowAppNames
         statusBarUseWorkspaceId = export.statusBarUseWorkspaceId
@@ -1317,7 +1410,9 @@ final class SettingsStore {
             splitWidthMultiplier: CGFloat(override?.splitWidthMultiplier ?? dwindleSplitWidthMultiplier),
             singleWindowFit: override?.singleWindowFit ?? dwindleSingleWindowFit,
             useGlobalGaps: useGlobalGaps,
-            innerGap: useGlobalGaps ? sharedInnerGap : resolvedInnerGap(override?.innerGap)
+            innerGap: useGlobalGaps ? sharedInnerGap : resolvedInnerGap(override?.innerGap),
+            centeredMaster: dwindleCenteredMaster,
+            masterRatio: CGFloat(dwindleMasterRatio)
         )
     }
 
@@ -1335,6 +1430,30 @@ final class SettingsStore {
 
     func removeGapSettings(for monitor: Monitor) {
         MonitorSettingsStore.remove(for: monitor, from: &monitorGapSettings)
+    }
+
+    func frontAndCenterSettings(for monitor: Monitor) -> MonitorFrontAndCenterSettings? {
+        MonitorSettingsStore.get(for: monitor, in: monitorFrontAndCenterSettings)
+    }
+
+    func updateFrontAndCenterSettings(_ settings: MonitorFrontAndCenterSettings, for monitor: Monitor) {
+        if settings.hasOverrides {
+            MonitorSettingsStore.update(settings, for: monitor, in: &monitorFrontAndCenterSettings)
+        } else {
+            MonitorSettingsStore.remove(for: monitor, from: &monitorFrontAndCenterSettings)
+        }
+    }
+
+    func removeFrontAndCenterSettings(for monitor: Monitor) {
+        MonitorSettingsStore.remove(for: monitor, from: &monitorFrontAndCenterSettings)
+    }
+
+    /// Share of the monitor's visible frame a window takes when brought front and center: the
+    /// per-monitor override when one exists, otherwise the global value, always clamped.
+    func resolvedFrontAndCenterSizeRatio(for monitor: Monitor) -> Double {
+        FrontAndCenterSettings.clampedSizeRatio(
+            frontAndCenterSettings(for: monitor)?.sizeRatio ?? frontAndCenterSizeRatio
+        )
     }
 
     func resolvedGapSettings(for monitor: Monitor) -> ResolvedGapSettings {

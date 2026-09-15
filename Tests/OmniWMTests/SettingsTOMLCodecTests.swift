@@ -509,6 +509,58 @@ final class SettingsTOMLCodecTests: XCTestCase {
         XCTAssertEqual(decoded.workspaceSwipeAxis, .horizontal)
     }
 
+    func testWorkspaceSwipeInvertDirectionRoundTripsAndFallsBackToColumnScrollInvert() throws {
+        XCTAssertTrue(SettingsExport.defaults().workspaceSwipeInvertDirection)
+
+        var export = SettingsExport.defaults()
+        export.gestureInvertDirection = true
+        export.workspaceSwipeInvertDirection = false
+        let data = try SettingsTOMLCodec.encode(export)
+        let encoded = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(encoded.contains("workspaceSwipeInvertDirection = false"))
+        XCTAssertFalse(try SettingsTOMLCodec.decode(data).workspaceSwipeInvertDirection)
+
+        let withoutKey = encoded.replacingOccurrences(of: "workspaceSwipeInvertDirection = false\n", with: "")
+        XCTAssertFalse(withoutKey.contains("workspaceSwipeInvertDirection"))
+        XCTAssertTrue(try SettingsTOMLCodec.decode(Data(withoutKey.utf8)).workspaceSwipeInvertDirection)
+
+        let invertedWithoutKey = withoutKey.replacingOccurrences(
+            of: "invertDirection = true\n",
+            with: "invertDirection = false\n"
+        )
+        XCTAssertFalse(try SettingsTOMLCodec.decode(Data(invertedWithoutKey.utf8)).workspaceSwipeInvertDirection)
+    }
+
+    func testWorkspaceSwipeDisablesSystemGestureRoundTripsAndDefaultsToOffWhenAbsent() throws {
+        XCTAssertFalse(SettingsExport.defaults().workspaceSwipeDisablesSystemGesture)
+
+        var export = SettingsExport.defaults()
+        export.workspaceSwipeDisablesSystemGesture = true
+        let data = try SettingsTOMLCodec.encode(export)
+        let encoded = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(encoded.contains("workspaceSwipeDisablesSystemGesture = true"))
+        XCTAssertTrue(try SettingsTOMLCodec.decode(data).workspaceSwipeDisablesSystemGesture)
+
+        let withoutKey = encoded.replacingOccurrences(of: "workspaceSwipeDisablesSystemGesture = true\n", with: "")
+        XCTAssertFalse(withoutKey.contains("workspaceSwipeDisablesSystemGesture"))
+        XCTAssertFalse(try SettingsTOMLCodec.decode(Data(withoutKey.utf8)).workspaceSwipeDisablesSystemGesture)
+    }
+
+    func testWorkspaceSwipeDistanceRoundTripsAndDefaultsWhenAbsent() throws {
+        XCTAssertEqual(SettingsExport.defaults().workspaceSwipeDistance, 0.28)
+
+        var export = SettingsExport.defaults()
+        export.workspaceSwipeDistance = 0.15
+        let data = try SettingsTOMLCodec.encode(export)
+        let encoded = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(encoded.contains("workspaceSwipeDistance = 0.15"))
+        XCTAssertEqual(try SettingsTOMLCodec.decode(data).workspaceSwipeDistance, 0.15)
+
+        let withoutKey = encoded.replacingOccurrences(of: "workspaceSwipeDistance = 0.15\n", with: "")
+        XCTAssertFalse(withoutKey.contains("workspaceSwipeDistance"))
+        XCTAssertEqual(try SettingsTOMLCodec.decode(Data(withoutKey.utf8)).workspaceSwipeDistance, 0.28)
+    }
+
     @MainActor
     func testNonfiniteTOMLScrollSensitivityNormalizesWhenApplied() throws {
         for literal in ["nan", "inf", "-inf"] {

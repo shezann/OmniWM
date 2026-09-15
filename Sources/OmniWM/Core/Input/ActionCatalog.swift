@@ -695,7 +695,7 @@ enum ActionCatalog {
                 id: "toggleContainerFullPrimarySpan",
                 command: .toggleContainerFullPrimarySpan,
                 category: .column,
-                binding: KeyBinding(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(optionKey | shiftKey))
+                binding: .unassigned
             ),
             action(
                 id: "expandContainerToAvailablePrimarySpan",
@@ -767,7 +767,14 @@ enum ActionCatalog {
             ),
             action(id: "moveToRoot", command: .moveToRoot, category: .layout, binding: .unassigned),
             action(id: "toggleSplit", command: .toggleSplit, category: .layout, binding: .unassigned),
-            action(id: "swapSplit", command: .swapSplit, category: .layout, binding: .unassigned)
+            action(id: "swapSplit", command: .swapSplit, category: .layout, binding: .unassigned),
+            action(
+                id: "swapWithMaster",
+                command: .swapWithMaster,
+                category: .layout,
+                binding: .unassigned,
+                keywords: ["master", "center", "main", "promote"]
+            )
         ])
 
         specs.append(contentsOf: [
@@ -815,7 +822,7 @@ enum ActionCatalog {
                 id: "resizeFocusedWindow.shrink",
                 command: .resizeFocusedWindow(false),
                 category: .layout,
-                binding: .unassigned,
+                binding: KeyBinding(keyCode: UInt32(kVK_ANSI_Minus), modifiers: UInt32(optionKey | controlKey)),
                 visibility: .advanced,
                 keywords: ["resize", "shrink"]
             ),
@@ -879,6 +886,13 @@ enum ActionCatalog {
                 keywords: ["rescue", "offscreen", "off-screen"]
             ),
             action(
+                id: "bringFocusedWindowFrontAndCenter",
+                command: .bringFocusedWindowFrontAndCenter,
+                category: .layout,
+                binding: KeyBinding(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(optionKey | shiftKey)),
+                keywords: ["lost", "find", "recover", "reveal", "summon", "center", "front", "float"]
+            ),
+            action(
                 id: "toggleFocusedWindowFloating",
                 command: .toggleFocusedWindowFloating,
                 category: .layout,
@@ -940,6 +954,13 @@ enum ActionCatalog {
                 category: .focus,
                 binding: .unassigned,
                 keywords: ["stats", "system", "cpu", "memory", "gpu", "disk", "fetch"]
+            ),
+            action(
+                id: "toggleWindowManagement",
+                command: .toggleWindowManagement,
+                category: .focus,
+                binding: .unassigned,
+                keywords: ["pause", "resume", "tiling", "disable", "enable", "window management"]
             )
         ])
 
@@ -973,6 +994,7 @@ enum ActionCatalog {
         case .moveToRoot,
              .toggleSplit,
              .swapSplit,
+             .swapWithMaster,
              .preselect,
              .preselectClear,
              .resizeAlongAxis,
@@ -1052,6 +1074,7 @@ enum ActionCatalog {
              .openCommandPalette,
              .raiseAllFloatingWindows,
              .rescueOffscreenWindows,
+             .bringFocusedWindowFrontAndCenter,
              .toggleFocusedWindowFloating,
              .closeFocusedWindow,
              .assignFocusedWindowToScratchpad,
@@ -1062,7 +1085,8 @@ enum ActionCatalog {
              .toggleQuakeTerminal,
              .toggleWorkspaceLayout,
              .toggleOverview,
-             .toggleSystemStats:
+             .toggleSystemStats,
+             .toggleWindowManagement:
             .shared
         }
     }
@@ -1134,6 +1158,7 @@ enum ActionCatalog {
         case .moveToRoot: "Move to Root"
         case .toggleSplit: "Toggle Split"
         case .swapSplit: "Swap Split"
+        case .swapWithMaster: "Swap with Master"
         case let .resizeAlongAxis(orientation, grow):
             "\(grow ? "Grow" : "Shrink") \(orientation == .horizontal ? "Horizontally" : "Vertically")"
         case let .resizeFocusedWindow(grow): "\(grow ? "Grow" : "Shrink") Focused Window"
@@ -1143,6 +1168,7 @@ enum ActionCatalog {
         case .openCommandPalette: "Toggle Command Palette"
         case .raiseAllFloatingWindows: "Raise All Floating Windows"
         case .rescueOffscreenWindows: "Rescue Off-Screen Floating Windows"
+        case .bringFocusedWindowFrontAndCenter: "Bring Focused Window Front and Center"
         case .toggleFocusedWindowFloating: "Toggle Focused Window Floating"
         case .closeFocusedWindow: "Close Focused Window"
         case let .assignFocusedWindowToScratchpad(index): "Assign Focused Window to Scratchpad \(index)"
@@ -1154,6 +1180,7 @@ enum ActionCatalog {
         case .toggleWorkspaceLayout: "Toggle Workspace Layout"
         case .toggleOverview: "Toggle Overview"
         case .toggleSystemStats: "Toggle System Stats"
+        case .toggleWindowManagement: "Toggle Window Management"
         }
     }
 
@@ -1287,6 +1314,8 @@ enum ActionCatalog {
             .toggleSplit
         case .swapSplit:
             .swapSplit
+        case .swapWithMaster:
+            .swapWithMaster
         case .resizeAlongAxis:
             .resize
         case .resizeFocusedWindow:
@@ -1301,6 +1330,8 @@ enum ActionCatalog {
             .raiseAllFloatingWindows
         case .rescueOffscreenWindows:
             .rescueOffscreenWindows
+        case .bringFocusedWindowFrontAndCenter:
+            .bringFocusedWindowFrontAndCenter
         case .toggleWorkspaceLayout:
             .toggleWorkspaceLayout
         case .toggleFullscreen:
@@ -1311,6 +1342,8 @@ enum ActionCatalog {
             .toggleOverview
         case .toggleSystemStats:
             .toggleSystemStats
+        case .toggleWindowManagement:
+            .toggleWindowManagement
         case .toggleQuakeTerminal:
             .toggleQuakeTerminal
         case .toggleWorkspaceBarVisibility:

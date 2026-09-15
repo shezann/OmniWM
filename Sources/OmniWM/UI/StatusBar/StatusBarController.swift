@@ -148,6 +148,16 @@ final class StatusBarController: NSObject {
             button.image?.isTemplate = false
             button.contentTintColor = nil
             button.toolTip = "OmniWM — measuring performance (auto-stops in 10 min)"
+        } else if controller?.isWindowManagementPaused == true {
+            button.layer?.removeAnimation(forKey: recordingPulseKey)
+            button.layer?.opacity = 1
+            button.image = NSImage(
+                systemSymbolName: "pause.circle",
+                accessibilityDescription: "OmniWM, window management paused"
+            )
+            button.image?.isTemplate = true
+            button.contentTintColor = nil
+            button.toolTip = "OmniWM — window management paused"
         } else {
             button.layer?.removeAnimation(forKey: recordingPulseKey)
             button.layer?.opacity = 1

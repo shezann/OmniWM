@@ -5,6 +5,14 @@ sidebar:
   order: 6
 ---
 
+## Pause tiling for a moment
+
+Click the **Tiling** tile in the status bar menu, bind **Toggle Window Management** under **Settings > Hotkeys**, or run `omniwmctl command toggle-window-management`. Pausing hands every window back to macOS where it sits, brings windows parked for inactive workspaces back onto their monitor, and drops borders, tab rails, and the workspace bar; scratchpad windows stay hidden. While paused only the toggle shortcut and **Bring Focused Window Front and Center** stay registered, and the menu bar icon shows a pause glyph. Resuming re-applies the remembered layouts in one animation, snapping moved windows back and admitting anything you opened in between. The pause is never saved across relaunches.
+
+## Find a lost window
+
+Press **Option + Shift + F** (**Bring Focused Window Front and Center** under **Settings > Hotkeys**) or run `omniwmctl command bring-focused-window-front-and-center`. The window the frontmost app has focused is floated, sized to 70% of the monitor under the pointer, centered there, and raised on top, whether it was parked for an inactive workspace, tucked into a scratchpad, minimized, hidden with its app, or sitting on another monitor. Change the size, globally or per display, under **Settings > Monitors > Front and Center**. Press it again to put the window back: a tiled window rejoins the layout of the workspace it is on now, a floating window returns to its previous spot. It also works while tiling is paused, where the second press restores the previous frame.
+
 ## Name your workspaces
 
 Create named workspaces in Settings to organize by project or context — emojis work too 🥳.
@@ -36,8 +44,8 @@ The **Trackpad Scroll Style** picker in **Settings → Mouse & Trackpad** choose
 
 ## Workspace swipe (opt-in)
 
-Opt in under **Settings → Mouse & Trackpad**: swipe with a configurable finger count (2/3/4) and axis (horizontal/vertical) to switch to the next/previous workspace on the monitor under the cursor, one switch per swipe. Sharing the column-scroll finger count locks the axis to vertical.
+Opt in under **Settings → Mouse & Trackpad**: swipe with a configurable finger count (2/3/4) and axis (horizontal/vertical) to switch to the next/previous workspace on the monitor under the cursor, one switch per swipe. Sharing the column-scroll finger count locks the axis to vertical. Workspace swipes have their own **Invert Direction (Natural)** toggle, independent of column scrolling: turn it off so swiping right goes to the next workspace and swiping left goes to the previous one. The **Swipe Distance** slider sets how far the fingers travel before the switch fires; a quick flick switches sooner.
 
-:::caution[Mission Control can intercept vertical swipes]
-For vertical swipes with three or four fingers, first turn off Mission Control in System Settings → Trackpad → More Gestures so macOS does not intercept the gesture.
+:::caution[macOS gestures can intercept swipes]
+With three or four fingers, macOS has its own swipe on the same axis: Mission Control for vertical swipes and **Swipe between full-screen applications** for horizontal ones. Turn on **Turn Off Conflicting macOS Gesture** in the Workspace Swipe section and OmniWM switches that macOS gesture off while workspace swipe is on and back on when it is off or OmniWM quits. Otherwise turn it off yourself in System Settings → Trackpad → More Gestures.
 :::

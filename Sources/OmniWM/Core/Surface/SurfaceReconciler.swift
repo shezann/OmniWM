@@ -346,9 +346,12 @@ final class SurfaceReconciler {
     func reconcileAnimationTick() {
         guard let controller else { return }
         let world = WorldView(controller: controller)
-        let desiredBorder = world.hasStartedServices
+        var desiredBorder = world.hasStartedServices
             ? SurfaceDerivation.deriveAnimationBorder(world: world, previous: appliedScene.border)
             : nil
+        if let border = desiredBorder, controller.workspaceSlideController.owns(windowId: border.windowId) {
+            desiredBorder = nil
+        }
         let outcome = borderApplier.apply(
             desiredBorder,
             forceOrdering: false,
@@ -521,6 +524,11 @@ final class SurfaceReconciler {
             }
         }
         var desired = SurfaceDerivation.derive(world: world)
+        if let border = desired.border, controller.workspaceSlideController.owns(windowId: border.windowId) {
+            desired.border = nil
+        }
+        desired.tabRails.removeAll { controller.workspaceSlideController.owns($0.workspaceId) }
+        desired.placeholders.removeAll { controller.workspaceSlideController.owns(windowId: $0.originalToken.windowId) }
         nativeFullscreenDescriptorsByOriginalToken.removeAll(keepingCapacity: true)
         for descriptor in desired.placeholders {
             nativeFullscreenDescriptorsByOriginalToken[descriptor.originalToken] = descriptor
@@ -559,9 +567,12 @@ final class SurfaceReconciler {
         BorderOpMetricsRecorder.shared.noteBorderOnlyPass()
         guard let controller else { return }
         let world = WorldView(controller: controller)
-        let desiredBorder = world.hasStartedServices
+        var desiredBorder = world.hasStartedServices
             ? SurfaceDerivation.deriveBorder(world: world)
             : nil
+        if let border = desiredBorder, controller.workspaceSlideController.owns(windowId: border.windowId) {
+            desiredBorder = nil
+        }
         let outcome = borderApplier.apply(
             desiredBorder,
             forceOrdering: forceOrdering,

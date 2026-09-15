@@ -501,6 +501,7 @@ enum StructuralMutationOutcome: Equatable {
         var plans: [WorkspaceLayoutPlan] = []
         let workspaceIds = activeWorkspaces.sorted(by: { $0.uuidString < $1.uuidString })
         for wsId in workspaceIds {
+            guard !controller.workspaceSlideController.owns(wsId) else { continue }
             guard let workspace = controller.workspaceManager.descriptor(for: wsId),
                   let monitor = controller.workspaceManager.monitor(for: wsId)
             else { continue }
