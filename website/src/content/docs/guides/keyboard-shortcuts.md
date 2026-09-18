@@ -25,6 +25,8 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 |--------|------------------|--------|
 | Switch to Workspace 1-9 | `Option + 1-9` | `Shared` |
 | Move Window to Workspace 1-9 | `Option + Shift + 1-9` | `Shared` |
+| Switch to Workspace Q/W/E | `Option + Q/W/E` | `Shared` |
+| Move Window to Workspace Q/W/E | `Option + Shift + Q/W/E` | `Shared` |
 | Switch to Workspace Slot 1-9 (position on the current monitor) | `Unassigned` | `Shared` |
 | Move to Workspace Slot 1-9 (position on the current monitor) | `Unassigned` | `Shared` |
 | Switch to Last Active Workspace (Back and Forth) | `Control + Option + Tab` | `Shared` |
@@ -33,6 +35,7 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 | Move Window to Workspace Up | `Control + Option + Shift + Up Arrow` | `Shared` |
 | Move Window to Workspace Down | `Control + Option + Shift + Down Arrow` | `Shared` |
 | Move Column to Workspace 1-9 | `Unassigned` | `Niri` |
+| Move Column to Workspace Q/W/E | `Unassigned` | `Niri` |
 | Move Column to Workspace Up | `Control + Option + Shift + Page Up` | `Niri` |
 | Move Column to Workspace Down | `Control + Option + Shift + Page Down` | `Niri` |
 

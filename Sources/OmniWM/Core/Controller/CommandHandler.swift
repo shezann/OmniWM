@@ -115,6 +115,12 @@ final class CommandHandler {
             controller.workspaceNavigationHandler.moveColumnToAdjacentWorkspace(direction: .down)
         case let .switchWorkspace(index):
             controller.workspaceNavigationHandler.switchWorkspace(index: index)
+        case let .switchWorkspaceNamed(name):
+            controller.workspaceNavigationHandler.switchWorkspace(rawWorkspaceID: name)
+        case let .moveToWorkspaceNamed(name):
+            controller.workspaceNavigationHandler.moveFocusedWindow(toRawWorkspaceID: name)
+        case let .moveColumnToWorkspaceNamed(name):
+            controller.workspaceNavigationHandler.moveColumnToWorkspace(rawWorkspaceID: name)
         case let .switchWorkspaceSlot(slot):
             controller.workspaceNavigationHandler.switchWorkspaceSlot(slot)
         case let .moveToWorkspaceSlot(slot):

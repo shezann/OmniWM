@@ -43,6 +43,11 @@ enum ActionCatalog {
         UInt32(kVK_ANSI_7), UInt32(kVK_ANSI_8), UInt32(kVK_ANSI_9)
     ]
 
+    /// Letter workspaces map to the physical key that names them, so `Option+Q` reaches workspace `q`.
+    private static let letterWorkspaceKeyCodes: [(rawID: String, keyCode: UInt32)] = [
+        ("q", UInt32(kVK_ANSI_Q)), ("w", UInt32(kVK_ANSI_W)), ("e", UInt32(kVK_ANSI_E))
+    ]
+
     private static let specs: [ActionSpec] = buildSpecs()
     private static let specsByID = Dictionary(
         uniqueKeysWithValues: specs.map { ($0.id, $0) }
@@ -145,6 +150,27 @@ enum ActionCatalog {
                     command: .moveToWorkspace(idx),
                     category: .workspace,
                     binding: KeyBinding(keyCode: code, modifiers: UInt32(optionKey | shiftKey))
+                )
+            )
+        }
+
+        for (rawID, code) in letterWorkspaceKeyCodes {
+            specs.append(
+                action(
+                    id: "switchWorkspace.\(rawID)",
+                    command: .switchWorkspaceNamed(rawID),
+                    category: .workspace,
+                    binding: KeyBinding(keyCode: code, modifiers: UInt32(optionKey)),
+                    keywords: ["letter workspace"]
+                )
+            )
+            specs.append(
+                action(
+                    id: "moveToWorkspace.\(rawID)",
+                    command: .moveToWorkspaceNamed(rawID),
+                    category: .workspace,
+                    binding: KeyBinding(keyCode: code, modifiers: UInt32(optionKey | shiftKey)),
+                    keywords: ["letter workspace"]
                 )
             )
         }
@@ -348,6 +374,19 @@ enum ActionCatalog {
                     category: .workspace,
                     binding: .unassigned,
                     visibility: .advanced
+                )
+            )
+        }
+
+        for (rawID, _) in letterWorkspaceKeyCodes {
+            specs.append(
+                action(
+                    id: "moveColumnToWorkspace.\(rawID)",
+                    command: .moveColumnToWorkspaceNamed(rawID),
+                    category: .workspace,
+                    binding: .unassigned,
+                    visibility: .advanced,
+                    keywords: ["letter workspace"]
                 )
             )
         }
@@ -1013,6 +1052,7 @@ enum ActionCatalog {
              .moveColumnToLast,
              .moveColumnToIndex,
              .moveColumnToWorkspace,
+             .moveColumnToWorkspaceNamed,
              .moveColumnToWorkspaceUp,
              .moveColumnToWorkspaceDown,
              .toggleContainerFullPrimarySpan,
@@ -1056,9 +1096,11 @@ enum ActionCatalog {
              .balanceSizes,
              .move,
              .moveToWorkspace,
+             .moveToWorkspaceNamed,
              .moveWindowToWorkspaceUp,
              .moveWindowToWorkspaceDown,
              .switchWorkspace,
+             .switchWorkspaceNamed,
              .switchWorkspaceSlot,
              .moveToWorkspaceSlot,
              .switchWorkspaceNext,
@@ -1103,6 +1145,9 @@ enum ActionCatalog {
         case .moveColumnToWorkspaceUp: "Move Column to Workspace Up"
         case .moveColumnToWorkspaceDown: "Move Column to Workspace Down"
         case let .switchWorkspace(idx): "Switch to Workspace \(idx + 1)"
+        case let .switchWorkspaceNamed(name): "Switch to Workspace \(name.uppercased())"
+        case let .moveToWorkspaceNamed(name): "Move to Workspace \(name.uppercased())"
+        case let .moveColumnToWorkspaceNamed(name): "Move Column to Workspace \(name.uppercased())"
         case let .switchWorkspaceSlot(slot): "Switch to Workspace Slot \(slot)"
         case let .moveToWorkspaceSlot(slot): "Move to Workspace Slot \(slot)"
         case .switchWorkspaceNext: "Switch to Next Workspace"
@@ -1236,7 +1281,8 @@ enum ActionCatalog {
             .consumeWindowIntoColumn
         case .expelWindowFromColumn:
             .expelWindowFromColumn
-        case .switchWorkspace:
+        case .switchWorkspace,
+             .switchWorkspaceNamed:
             .switchWorkspace
         case .switchWorkspaceSlot:
             .switchWorkspaceSlot
@@ -1248,7 +1294,8 @@ enum ActionCatalog {
             .switchWorkspacePrevious
         case .workspaceBackAndForth:
             .switchWorkspaceBackAndForth
-        case .moveToWorkspace:
+        case .moveToWorkspace,
+             .moveToWorkspaceNamed:
             .moveToWorkspace
         case .moveWindowToWorkspaceUp:
             .moveToWorkspaceUp
@@ -1268,7 +1315,8 @@ enum ActionCatalog {
             .moveColumnToLast
         case .moveColumnToIndex:
             .moveColumnToIndex
-        case .moveColumnToWorkspace:
+        case .moveColumnToWorkspace,
+             .moveColumnToWorkspaceNamed:
             .moveColumnToWorkspace
         case .moveColumnToWorkspaceUp:
             .moveColumnToWorkspaceUp

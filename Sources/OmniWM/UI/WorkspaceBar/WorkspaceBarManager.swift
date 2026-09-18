@@ -150,6 +150,7 @@ final class WorkspaceBarManager {
     private weak var settings: SettingsStore?
     private let motionPolicy: MotionPolicy
     private let surfaceCoordinator = SurfaceCoordinator.shared
+    private let labelEditor = WorkspaceLabelEditorController()
 
     init(motionPolicy: MotionPolicy) {
         self.motionPolicy = motionPolicy
@@ -349,6 +350,37 @@ final class WorkspaceBarManager {
             },
             onSystemStatsAnchorChange: { [weak self] anchor in
                 self?.updateStatsAnchor(anchor, on: monitorId)
+            },
+            onBeginWorkspaceLabelEdit: { [weak self, weak controller] item, labelFrame in
+                guard let self, let controller else { return }
+                beginWorkspaceLabelEdit(item, labelFrame: labelFrame, monitorId: monitorId, controller: controller)
+            },
+            onReorderWorkspaces: { [weak controller] orderedIds in
+                controller?.reorderWorkspacesFromBar(orderedIds: orderedIds) ?? false
+            }
+        )
+    }
+
+    private func beginWorkspaceLabelEdit(
+        _ item: WorkspaceBarItem,
+        labelFrame: CGRect?,
+        monitorId: Monitor.ID,
+        controller: WMController
+    ) {
+        guard let instance = barsByMonitor[monitorId] else { return }
+        let resolved = settings?.resolvedBarSettings(for: instance.monitor)
+        let anchor = labelFrame ?? instance.primary.panel.frame
+        labelEditor.begin(
+            WorkspaceLabelEditRequest(
+                workspaceId: item.id,
+                currentName: item.rawName,
+                anchorFrame: anchor,
+                barLevel: instance.primary.panel.level,
+                accentColor: resolved?.accentColor?.swiftUIColor,
+                textColor: resolved?.textColor?.swiftUIColor
+            ),
+            onCommit: { [weak controller] newName in
+                controller?.renameWorkspaceFromBar(id: item.id, to: newName) ?? false
             }
         )
     }
@@ -721,6 +753,7 @@ final class WorkspaceBarManager {
     }
 
     func cleanup() {
+        labelEditor.dismiss()
         removeAllBars()
     }
 

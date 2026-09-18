@@ -5,7 +5,7 @@ import Foundation
 import TOML
 
 enum SettingsTOMLCodec {
-    static let currentSchemaVersion = 6
+    static let currentSchemaVersion = 7
 
     private static let versionOneHotkeyIDs = [
         "toggleScratchpad.1",
@@ -71,6 +71,20 @@ enum SettingsTOMLCodec {
     ]
 
     static let hotkeyIDsAddedInVersionSix = Set(versionSixHotkeyIDs)
+
+    private static let versionSevenHotkeyIDs = [
+        "switchWorkspace.q",
+        "moveToWorkspace.q",
+        "switchWorkspace.w",
+        "moveToWorkspace.w",
+        "switchWorkspace.e",
+        "moveToWorkspace.e",
+        "moveColumnToWorkspace.q",
+        "moveColumnToWorkspace.w",
+        "moveColumnToWorkspace.e"
+    ]
+
+    static let hotkeyIDsAddedInVersionSeven = Set(versionSevenHotkeyIDs)
 
     private struct PersistedHotkeyArray: Decodable {
         let hotkeys: [PersistedHotkeyBinding]
@@ -155,7 +169,8 @@ enum SettingsTOMLCodec {
         let versionThreeDefaultedPaths = version <= 2 ? try migrateVersionTwo(&raw) : []
         let versionFourAddedHotkeyIDs = version <= 3 ? migrateVersionThree(&raw) : []
         let versionFiveAddedHotkeyIDs = version <= 4 ? migrateVersionFour(&raw) : []
-        let versionSixAddedHotkeyIDs = migrateVersionFive(&raw)
+        let versionSixAddedHotkeyIDs = version <= 5 ? migrateVersionFive(&raw) : []
+        let versionSevenAddedHotkeyIDs = migrateVersionSix(&raw)
         canonicalizeMigratedHotkeys(in: &raw)
         let report = SettingsMigrationReport(
             fromVersion: version,
@@ -165,7 +180,8 @@ enum SettingsTOMLCodec {
                 + versionTwoAddedHotkeyIDs
                 + versionFourAddedHotkeyIDs
                 + versionFiveAddedHotkeyIDs
-                + versionSixAddedHotkeyIDs,
+                + versionSixAddedHotkeyIDs
+                + versionSevenAddedHotkeyIDs,
             mappedHotkeys: versionOneReport?.mappedHotkeys ?? [],
             retiredHotkeys: versionOneReport?.retiredHotkeys ?? []
         )
@@ -414,6 +430,45 @@ enum SettingsTOMLCodec {
         return addedIDs
     }
 
+    /// Version 7 adds the letter workspaces `q`, `w` and `e`: switch, move-window and move-column actions
+    /// for each. Unlike earlier steps, the switch and move entries receive their default chords
+    /// (`Option+Q`, `Option+Shift+Q`, ...) when the file does not already bind that chord to something
+    /// else, because the letters are useless without a key. A chord that is taken stays Unassigned.
+    private static func migrateVersionSix(_ raw: inout [String: TOMLNode]) -> [String] {
+        defer { raw["schemaVersion"] = .integer(7) }
+        guard case var .array(entries) = raw["hotkeys"] else { return [] }
+
+        let addedIDs = appendMissingHotkeysUsingFreeDefaults(versionSevenHotkeyIDs, to: &entries)
+        raw["hotkeys"] = .array(entries)
+        return addedIDs
+    }
+
+    private static func appendMissingHotkeysUsingFreeDefaults(
+        _ ids: [String],
+        to entries: inout [TOMLNode]
+    ) -> [String] {
+        let presentIDs = Set(entries.compactMap(hotkeyID))
+        var usedBindings = Set(entries.compactMap(hotkeyBindingString).filter { $0 != "Unassigned" })
+        let defaults = Dictionary(
+            HotkeyBindingRegistry.defaults().map { ($0.id, $0.binding.humanReadableString) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var addedIDs: [String] = []
+        for id in ids where !presentIDs.contains(id) {
+            var binding = "Unassigned"
+            if let preferred = defaults[id], preferred != "Unassigned", !usedBindings.contains(preferred) {
+                binding = preferred
+                usedBindings.insert(preferred)
+            }
+            entries.append(.table([
+                "binding": .string(binding),
+                "id": .string(id)
+            ]))
+            addedIDs.append(id)
+        }
+        return addedIDs
+    }
+
     private static func appendMissingUnassignedHotkeys(
         _ ids: [String],
         to entries: inout [TOMLNode]
@@ -445,6 +500,11 @@ enum SettingsTOMLCodec {
     private static func hotkeyID(_ node: TOMLNode) -> String? {
         guard case let .table(table) = node, case let .string(id) = table["id"] else { return nil }
         return id
+    }
+
+    private static func hotkeyBindingString(_ node: TOMLNode) -> String? {
+        guard case let .table(table) = node, case let .string(binding) = table["binding"] else { return nil }
+        return binding
     }
 }
 

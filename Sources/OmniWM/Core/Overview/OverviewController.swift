@@ -425,6 +425,14 @@ final class OverviewController {
                 handle: selectedHandle,
                 toWorkspaceIndex: index
             )
+        case let .moveToWorkspaceNamed(name):
+            guard let workspaceId = wmController.workspaceManager.workspaceId(for: name, createIfMissing: false) else {
+                return .unchanged
+            }
+            return wmController.workspaceNavigationHandler.moveWindow(
+                handle: selectedHandle,
+                toWorkspaceId: workspaceId
+            )
         case .moveWindowToWorkspaceUp:
             return wmController.workspaceNavigationHandler.moveWindowToAdjacentWorkspace(
                 handle: selectedHandle,
@@ -440,6 +448,14 @@ final class OverviewController {
             return wmController.workspaceNavigationHandler.moveColumn(
                 containing: selectedHandle,
                 toWorkspaceIndex: index
+            )
+        case let .moveColumnToWorkspaceNamed(name):
+            guard isNiri,
+                  let workspaceId = wmController.workspaceManager.workspaceId(for: name, createIfMissing: false)
+            else { return .unchanged }
+            return wmController.workspaceNavigationHandler.moveColumn(
+                containing: selectedHandle,
+                toWorkspaceId: workspaceId
             )
         case .moveColumnToWorkspaceUp:
             guard isNiri else { return .unchanged }
@@ -473,9 +489,11 @@ final class OverviewController {
              .moveColumnToLast,
              .moveColumnToIndex,
              .moveToWorkspace,
+             .moveToWorkspaceNamed,
              .moveWindowToWorkspaceUp,
              .moveWindowToWorkspaceDown,
              .moveColumnToWorkspace,
+             .moveColumnToWorkspaceNamed,
              .moveColumnToWorkspaceUp,
              .moveColumnToWorkspaceDown:
             true

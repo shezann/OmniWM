@@ -638,12 +638,15 @@ Settings hides advanced actions from the shortcut list by default. Turn on `Incl
 |--------|------------------|--------|
 | Switch to Workspace 1-9 | `Option + 1-9` | `Shared` |
 | Move Window to Workspace 1-9 | `Option + Shift + 1-9` | `Shared` |
+| Switch to Workspace Q/W/E | `Option + Q/W/E` | `Shared` |
+| Move Window to Workspace Q/W/E | `Option + Shift + Q/W/E` | `Shared` |
 | Switch to Last Active Workspace (Back and Forth) | `Control + Option + Tab` | `Shared` |
 | Switch to Next Workspace | `Unassigned` | `Shared` |
 | Switch to Previous Workspace (Sequential) | `Unassigned` | `Shared` |
 | Move Window to Workspace Up | `Control + Option + Shift + Up Arrow` | `Shared` |
 | Move Window to Workspace Down | `Control + Option + Shift + Down Arrow` | `Shared` |
 | Move Column to Workspace 1-9 | `Unassigned` | `Niri` |
+| Move Column to Workspace Q/W/E | `Unassigned` | `Niri` |
 | Move Column to Workspace Up | `Control + Option + Shift + Page Up` | `Niri` |
 | Move Column to Workspace Down | `Control + Option + Shift + Page Down` | `Niri` |
 
@@ -852,6 +855,8 @@ See all windows at once with thumbnails:
 A visual indicator showing your workspaces:
 - Displays open apps per workspace
 - Click to switch workspaces or jump to that app
+- Double-click a workspace's ID to change it (a number, or `q`, `w`, `e`); the workspace keeps its windows and the matching `Option + <key>` shortcut follows the new ID
+- Drag a workspace along the bar to reorder it. The bar always runs in ID order, so a drop renumbers the affected workspaces and the `Option + <key>` shortcuts keep matching what you see
 - When `Deduplicate App Icons` is enabled, multiple windows from one app share an icon; click a grouped icon to open their window list, while a single-window icon focuses that window directly
 - Marks macOS-hidden windows with an eye-slash badge; selecting a hidden window unhides its app and focuses that exact window
 - Configure position, height, and appearance in Settings

@@ -3656,6 +3656,43 @@ final class WorkspaceManager {
         return true
     }
 
+    /// Renames several workspaces at once. The new names may be a permutation of the old ones (a
+    /// drag-and-drop renumber in the workspace bar), so the name index is rebuilt afterwards rather
+    /// than patched one rename at a time. Returns false, changing nothing, when a new name is not a
+    /// valid raw ID, is used twice, or collides with a workspace that is not being renamed.
+    @discardableResult
+    func renameWorkspaces(_ newNamesById: [WorkspaceDescriptor.ID: String]) -> Bool {
+        let changes = newNamesById.filter { id, name in
+            guard let workspace = workspacesById[id] else { return false }
+            return workspace.name != name
+        }
+        guard !changes.isEmpty else { return false }
+
+        let untouchedNames = Set(workspacesById.values.filter { changes[$0.id] == nil }.map(\.name))
+        var claimed: Set<String> = []
+        for name in changes.values {
+            guard WorkspaceIDPolicy.normalizeRawID(name) == name,
+                  !untouchedNames.contains(name),
+                  claimed.insert(name).inserted
+            else { return false }
+        }
+
+        for (id, name) in changes {
+            workspacesById[id]?.name = name
+        }
+        workspaceIdByName = Dictionary(
+            workspacesById.values.map { ($0.name, $0.id) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        _cachedSortedWorkspaces = nil
+        invalidateWorkspaceProjectionCaches()
+        for id in changes.keys {
+            noteInvalidation(workspaceId: id, domains: [.workspace, .layout])
+        }
+        schedulePersistedWindowRestoreCatalogSave()
+        return true
+    }
+
     private func updateWorkspace(_ workspaceId: WorkspaceDescriptor.ID, update: (inout WorkspaceDescriptor) -> Void) {
         guard var workspace = workspacesById[workspaceId] else { return }
         let previousWorkspace = workspace

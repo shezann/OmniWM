@@ -4,11 +4,27 @@
 import Foundation
 
 public enum WorkspaceIDPolicy {
+    /// Letter workspace IDs, in the order they sort after the numeric IDs. They follow the keyboard
+    /// row so that `q`, `w`, `e` read left to right in the workspace bar, the same way `1`, `2`, `3` do.
+    public static let letterRawIDs: [String] = ["q", "w", "e"]
+
+    private static let letterRank: [String: Int] = Dictionary(
+        uniqueKeysWithValues: letterRawIDs.enumerated().map { ($1, $0) }
+    )
+
     public static func normalizeRawID(_ candidate: String) -> String? {
-        guard let value = Int(candidate), value > 0 else { return nil }
-        let normalized = String(value)
-        guard normalized == candidate else { return nil }
-        return normalized
+        if let value = Int(candidate), value > 0 {
+            let normalized = String(value)
+            guard normalized == candidate else { return nil }
+            return normalized
+        }
+        let lowered = candidate.lowercased()
+        guard letterRank[lowered] != nil else { return nil }
+        return lowered
+    }
+
+    public static func isLetterRawID(_ rawID: String) -> Bool {
+        letterRank[rawID] != nil
     }
 
     public static func rawID(from workspaceNumber: Int) -> String? {
@@ -17,7 +33,7 @@ public enum WorkspaceIDPolicy {
     }
 
     public static func workspaceNumber(from rawID: String) -> Int? {
-        guard let normalized = normalizeRawID(rawID) else { return nil }
+        guard let normalized = normalizeRawID(rawID), !isLetterRawID(normalized) else { return nil }
         return Int(normalized)
     }
 
@@ -30,17 +46,41 @@ public enum WorkspaceIDPolicy {
         return String(candidate)
     }
 
+    /// Numeric IDs sort first in ascending order, then the letter IDs in keyboard order, then
+    /// anything else alphabetically.
     public static func sortsBefore(_ lhs: String, _ rhs: String) -> Bool {
-        switch (workspaceNumber(from: lhs), workspaceNumber(from: rhs)) {
-        case let (lhs?, rhs?):
+        switch (sortKey(lhs), sortKey(rhs)) {
+        case let (.number(lhs), .number(rhs)):
             return lhs < rhs
-        case (.some, .none):
+        case (.number, _):
             return true
-        case (.none, .some):
+        case (_, .number):
             return false
-        case (.none, .none):
+        case let (.letter(lhs), .letter(rhs)):
+            return lhs < rhs
+        case (.letter, .other):
+            return true
+        case (.other, .letter):
+            return false
+        case let (.other(lhs), .other(rhs)):
             return lhs.localizedStandardCompare(rhs) == .orderedAscending
         }
+    }
+
+    private enum SortKey {
+        case number(Int)
+        case letter(Int)
+        case other(String)
+    }
+
+    private static func sortKey(_ rawID: String) -> SortKey {
+        if let number = workspaceNumber(from: rawID) {
+            return .number(number)
+        }
+        if let rank = letterRank[rawID] {
+            return .letter(rank)
+        }
+        return .other(rawID)
     }
 }
 

@@ -191,6 +191,10 @@ struct WorkspaceBarView: View {
     let onActivateScratchpad: (Int) -> Void
     var onToggleSystemStats: () -> Void = {}
     var onSystemStatsAnchorChange: (CGPoint?) -> Void = { _ in }
+    /// Double-click on a workspace label. The rect is the label's frame in screen coordinates, when known.
+    var onBeginWorkspaceLabelEdit: (WorkspaceBarItem, CGRect?) -> Void = { _, _ in }
+    /// Drag-and-drop finished with the workspaces in this new left-to-right order. Returns whether it was applied.
+    var onReorderWorkspaces: ([WorkspaceDescriptor.ID]) -> Bool = { _ in false }
 
     var body: some View {
         WorkspaceBarContentView(
@@ -202,7 +206,9 @@ struct WorkspaceBarView: View {
             onFocusWindow: onFocusWindow,
             onActivateScratchpad: onActivateScratchpad,
             onToggleSystemStats: onToggleSystemStats,
-            onSystemStatsAnchorChange: onSystemStatsAnchorChange
+            onSystemStatsAnchorChange: onSystemStatsAnchorChange,
+            onBeginWorkspaceLabelEdit: onBeginWorkspaceLabelEdit,
+            onReorderWorkspaces: onReorderWorkspaces
         )
     }
 }
@@ -229,6 +235,56 @@ struct WorkspaceBarMeasurementView: View {
     }
 }
 
+/// Frames of the workspace pills in the bar's own coordinate space, used to compute drag reorders.
+private struct WorkspaceBarItemFramesKey: PreferenceKey {
+    static let defaultValue: [WorkspaceDescriptor.ID: CGRect] = [:]
+
+    static func reduce(
+        value: inout [WorkspaceDescriptor.ID: CGRect],
+        nextValue: () -> [WorkspaceDescriptor.ID: CGRect]
+    ) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+/// A workspace pill being dragged along the bar. Frames are captured when the drag starts so the
+/// live shifting of the other pills never feeds back into the geometry it is computed from.
+struct WorkspaceBarDragState: Equatable {
+    let workspaceId: WorkspaceDescriptor.ID
+    let frames: [WorkspaceDescriptor.ID: CGRect]
+    var translation: CGFloat
+
+    /// Where the dragged pill would be inserted among the other pills, counted over those pills.
+    func targetIndex(in order: [WorkspaceDescriptor.ID]) -> Int {
+        guard let draggedFrame = frames[workspaceId] else { return order.firstIndex(of: workspaceId) ?? 0 }
+        let draggedCenter = draggedFrame.midX + translation
+        return order.filter { $0 != workspaceId }.filter { id in
+            (frames[id]?.midX ?? .infinity) < draggedCenter
+        }.count
+    }
+
+    /// Visual offset for a pill while the drag is in flight.
+    func offset(for id: WorkspaceDescriptor.ID, spacing: CGFloat) -> CGFloat {
+        if id == workspaceId {
+            return translation
+        }
+        guard let draggedFrame = frames[workspaceId], let frame = frames[id] else { return 0 }
+        let draggedCenter = draggedFrame.midX + translation
+        let shift = draggedFrame.width + spacing
+        if frame.midX > draggedFrame.midX, frame.midX < draggedCenter {
+            return -shift
+        }
+        if frame.midX < draggedFrame.midX, frame.midX > draggedCenter {
+            return shift
+        }
+        return 0
+    }
+
+    func reorderedIds(from order: [WorkspaceDescriptor.ID]) -> [WorkspaceDescriptor.ID] {
+        WorkspaceRenumberPlanner.moving(workspaceId, in: order, toIndex: targetIndex(in: order))
+    }
+}
+
 @MainActor
 private struct WorkspaceBarContentView: View {
     let snapshot: WorkspaceBarSnapshot
@@ -240,6 +296,17 @@ private struct WorkspaceBarContentView: View {
     let onActivateScratchpad: (Int) -> Void
     let onToggleSystemStats: () -> Void
     let onSystemStatsAnchorChange: (CGPoint?) -> Void
+    var onBeginWorkspaceLabelEdit: (WorkspaceBarItem, CGRect?) -> Void = { _, _ in }
+    var onReorderWorkspaces: ([WorkspaceDescriptor.ID]) -> Bool = { _ in false }
+
+    @State private var itemFrames: [WorkspaceDescriptor.ID: CGRect] = [:]
+    @State private var dragState: WorkspaceBarDragState?
+    /// Order committed by a drop, shown until the renamed snapshot arrives so the pills do not snap back.
+    @State private var pendingOrder: [WorkspaceDescriptor.ID]?
+    @State private var dragEndedAt: Date?
+
+    private static let coordinateSpaceName = "workspaceBar"
+    private static let tapSuppressionAfterDrag: TimeInterval = 0.3
 
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @Environment(\.colorScheme) private var colorScheme
@@ -275,9 +342,57 @@ private struct WorkspaceBarContentView: View {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
     }
 
+    private var displayedItems: [WorkspaceBarItem] {
+        let items = slice.items(in: snapshot)
+        guard let pendingOrder else { return items }
+        let rank = Dictionary(uniqueKeysWithValues: pendingOrder.enumerated().map { ($1, $0) })
+        guard items.allSatisfy({ rank[$0.id] != nil }) else { return items }
+        return items.sorted { (rank[$0.id] ?? 0) < (rank[$1.id] ?? 0) }
+    }
+
+    private var tapsSuppressedByDrag: Bool {
+        if dragState != nil {
+            return true
+        }
+        guard let dragEndedAt else { return false }
+        return Date().timeIntervalSince(dragEndedAt) < Self.tapSuppressionAfterDrag
+    }
+
+    private func reorderGesture(for item: WorkspaceBarItem) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.coordinateSpaceName))
+            .onChanged { value in
+                if dragState == nil {
+                    dragState = WorkspaceBarDragState(
+                        workspaceId: item.id,
+                        frames: itemFrames,
+                        translation: value.translation.width
+                    )
+                } else if dragState?.workspaceId == item.id {
+                    dragState?.translation = value.translation.width
+                }
+            }
+            .onEnded { _ in
+                defer {
+                    dragState = nil
+                    dragEndedAt = Date()
+                }
+                guard let dragState, dragState.workspaceId == item.id else { return }
+                let order = displayedItems.map(\.id)
+                let reordered = dragState.reorderedIds(from: order)
+                guard reordered != order else { return }
+                pendingOrder = onReorderWorkspaces(reordered) ? reordered : nil
+            }
+    }
+
+    private var snapshotItemIds: [WorkspaceDescriptor.ID] {
+        slice.items(in: snapshot).map(\.id)
+    }
+
     var body: some View {
+        let items = displayedItems
         HStack(spacing: workspaceSpacing) {
-            ForEach(slice.items(in: snapshot), id: \.id) { item in
+            ForEach(items, id: \.id) { item in
+                let offset = dragState?.offset(for: item.id, spacing: workspaceSpacing) ?? 0
                 WorkspaceItemView(
                     item: item,
                     iconSize: iconSize,
@@ -288,9 +403,35 @@ private struct WorkspaceBarContentView: View {
                     showLabels: snapshot.showLabels,
                     accentColor: accentColor,
                     textColor: textColor,
-                    onFocusWorkspace: { onFocusWorkspace(item) },
-                    onFocusWindow: onFocusWindow
+                    isDragging: dragState?.workspaceId == item.id,
+                    onFocusWorkspace: {
+                        guard !tapsSuppressedByDrag else { return }
+                        onFocusWorkspace(item)
+                    },
+                    onFocusWindow: { handle in
+                        guard !tapsSuppressedByDrag else { return }
+                        onFocusWindow(handle)
+                    },
+                    onBeginLabelEdit: { frame in
+                        guard !tapsSuppressedByDrag else { return }
+                        onBeginWorkspaceLabelEdit(item, frame)
+                    }
                 )
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: WorkspaceBarItemFramesKey.self,
+                            value: [item.id: proxy.frame(in: .named(Self.coordinateSpaceName))]
+                        )
+                    }
+                }
+                .offset(x: offset)
+                .animation(
+                    dragState?.workspaceId == item.id || !animationsEnabled ? nil : .easeOut(duration: 0.12),
+                    value: offset
+                )
+                .zIndex(dragState?.workspaceId == item.id ? 1 : 0)
+                .simultaneousGesture(reorderGesture(for: item))
             }
 
             ForEach(slice.scratchpads(in: snapshot)) { scratchpad in
@@ -314,6 +455,14 @@ private struct WorkspaceBarContentView: View {
                     onAnchorChange: onSystemStatsAnchorChange
                 )
             }
+        }
+        .coordinateSpace(name: Self.coordinateSpaceName)
+        .onPreferenceChange(WorkspaceBarItemFramesKey.self) { frames in
+            itemFrames = frames
+        }
+        .onChange(of: snapshotItemIds) { _, _ in
+            // The renamed snapshot has arrived (or the set of workspaces changed); stop overriding its order.
+            pendingOrder = nil
         }
         .padding(.horizontal, 4)
         .frame(height: itemHeight + 4)
@@ -347,19 +496,22 @@ private struct WorkspaceItemView: View {
     let showLabels: Bool
     let accentColor: Color?
     let textColor: Color?
+    var isDragging = false
     let onFocusWorkspace: () -> Void
     let onFocusWindow: (WindowHandle) -> Void
+    var onBeginLabelEdit: (CGRect?) -> Void = { _ in }
 
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: windowSpacing) {
             if showLabels {
-                WorkspaceLabelButton(
+                WorkspaceLabelView(
                     item: item,
                     accentColor: accentColor,
                     textColor: textColor,
-                    onFocusWorkspace: onFocusWorkspace
+                    onFocusWorkspace: onFocusWorkspace,
+                    onBeginEdit: onBeginLabelEdit
                 )
 
                 if !item.windows.isEmpty {
@@ -369,11 +521,12 @@ private struct WorkspaceItemView: View {
                         .accessibilityHidden(true)
                 }
             } else if item.windows.isEmpty {
-                WorkspaceLabelButton(
+                WorkspaceLabelView(
                     item: item,
                     accentColor: accentColor,
                     textColor: textColor,
-                    onFocusWorkspace: onFocusWorkspace
+                    onFocusWorkspace: onFocusWorkspace,
+                    onBeginEdit: onBeginLabelEdit
                 )
             }
 
@@ -417,15 +570,16 @@ private struct WorkspaceItemView: View {
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
         .onTapGesture(perform: onFocusWorkspace)
         .background {
-            if item.isFocused || isHovered {
+            if item.isFocused || isHovered || isDragging {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(.regularMaterial)
                     .overlay {
-                        if item.isFocused {
+                        if item.isFocused || isDragging {
                             RoundedRectangle(cornerRadius: cornerRadius)
                                 .strokeBorder(accentColor ?? .accentColor, lineWidth: 1)
                         }
                     }
+                    .shadow(color: .black.opacity(isDragging ? 0.25 : 0), radius: 4, y: 1)
             }
         }
         .onHover { hovering in
@@ -483,8 +637,19 @@ private struct SystemStatsButtonView: View {
     }
 }
 
-private struct WorkspaceBarAnchorReporter: NSViewRepresentable {
+private struct WorkspaceBarAnchorReporter: View {
     let onChange: (CGPoint?) -> Void
+
+    var body: some View {
+        WorkspaceBarScreenFrameReporter { frame in
+            onChange(frame.map(WorkspaceBarGeometry.statsButtonAnchor(buttonFrame:)))
+        }
+    }
+}
+
+/// Reports the hosting view's frame in screen coordinates whenever it changes.
+private struct WorkspaceBarScreenFrameReporter: NSViewRepresentable {
+    let onChange: (CGRect?) -> Void
 
     func makeNSView(context: Context) -> NSView {
         NSView(frame: .zero)
@@ -502,36 +667,38 @@ private struct WorkspaceBarAnchorReporter: NSViewRepresentable {
 
     @MainActor
     final class Coordinator {
-        private let onChange: (CGPoint?) -> Void
-        private var lastAnchor: CGPoint?
+        private let onChange: (CGRect?) -> Void
+        private var lastFrame: CGRect?
 
-        init(onChange: @escaping (CGPoint?) -> Void) {
+        init(onChange: @escaping (CGRect?) -> Void) {
             self.onChange = onChange
         }
 
         func report(_ view: NSView) {
-            let anchor: CGPoint?
+            let frame: CGRect?
             if let window = view.window {
                 let localFrame = view.convert(view.bounds, to: nil)
-                let screenFrame = window.convertToScreen(localFrame)
-                anchor = WorkspaceBarGeometry.statsButtonAnchor(buttonFrame: screenFrame)
+                frame = window.convertToScreen(localFrame)
             } else {
-                anchor = nil
+                frame = nil
             }
-            if anchor != lastAnchor {
-                lastAnchor = anchor
-                onChange(anchor)
+            if frame != lastFrame {
+                lastFrame = frame
+                onChange(frame)
             }
         }
     }
 }
 
 @MainActor
-private struct WorkspaceLabelButton: View {
+private struct WorkspaceLabelView: View {
     let item: WorkspaceBarItem
     let accentColor: Color?
     let textColor: Color?
     let onFocusWorkspace: () -> Void
+    var onBeginEdit: (CGRect?) -> Void = { _ in }
+
+    @State private var screenFrame: CGRect?
 
     private var resolvedAccentColor: Color {
         accentColor ?? .accentColor
@@ -542,20 +709,32 @@ private struct WorkspaceLabelButton: View {
     }
 
     var body: some View {
-        Button(action: onFocusWorkspace) {
-            Text(item.name)
-                .font(.system(.caption, design: .monospaced).weight(.medium))
-                .foregroundColor(resolvedLabelColor)
-                .lineLimit(1)
-                .frame(minWidth: 16)
-                .fixedSize(horizontal: true, vertical: false)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Workspace \(item.name)")
-        .accessibilityValue(item.isFocused ? "Focused" : "")
-        .help("Focus workspace \(item.name)")
+        Text(item.name)
+            .font(WorkspaceBarLabelStyle.font)
+            .foregroundColor(resolvedLabelColor)
+            .lineLimit(1)
+            .frame(minWidth: 16)
+            .fixedSize(horizontal: true, vertical: false)
+            .contentShape(Rectangle())
+            .background(WorkspaceBarScreenFrameReporter { screenFrame = $0 })
+            // The double-tap must be attached first so a single click waits for a possible second one.
+            .onTapGesture(count: 2) {
+                onBeginEdit(screenFrame)
+            }
+            .onTapGesture(count: 1, perform: onFocusWorkspace)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Workspace \(item.name)")
+            .accessibilityValue(item.isFocused ? "Focused" : "")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: "Edit workspace ID") {
+                onBeginEdit(screenFrame)
+            }
+            .help("Focus workspace \(item.name). Double-click to change its ID, drag to reorder.")
     }
+}
+
+enum WorkspaceBarLabelStyle {
+    static let font: Font = .system(.caption, design: .monospaced).weight(.medium)
 }
 
 @MainActor

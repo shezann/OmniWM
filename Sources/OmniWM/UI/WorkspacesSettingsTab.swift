@@ -42,7 +42,12 @@ enum WorkspaceConfigurationAddPolicy {
 
     static let addButtonHelp = "Add the lowest unused workspace ID"
     static let footerText =
-        "Workspace IDs use positive numeric slots. Display Name stays editable. Direct workspace hotkeys remain limited to 1-9; add 10+ here or through IPC/CLI."
+        "Workspace IDs are positive numbers or the letters q, w and e. Display Name stays editable. Direct workspace hotkeys cover 1-9 and q, w, e; add 10+ here or through IPC/CLI. In the workspace bar, double-click an ID to change it and drag workspaces to renumber them."
+
+    static func isValidNewWorkspaceName(_ candidate: String, in configurations: [WorkspaceConfiguration]) -> Bool {
+        guard let normalized = WorkspaceIDPolicy.normalizeRawID(candidate) else { return false }
+        return !configurations.contains { $0.name == normalized }
+    }
 }
 
 struct WorkspacesSettingsTab: View {
@@ -126,8 +131,11 @@ struct WorkspacesSettingsTab: View {
                 ),
                 isNew: true,
                 connectedMonitors: connectedMonitors,
+                existingConfigurations: settings.workspaceConfigurations,
                 onSave: { newConfig in
-                    addConfiguration(newConfig)
+                    var config = newConfig
+                    config.name = WorkspaceIDPolicy.normalizeRawID(config.name) ?? config.name
+                    addConfiguration(config)
                     isAddingNew = false
                 },
                 onCancel: { isAddingNew = false }
@@ -296,6 +304,7 @@ struct WorkspaceEditSheet: View {
     @State private var configuration: WorkspaceConfiguration
     let isNew: Bool
     let connectedMonitors: [Monitor]
+    let existingConfigurations: [WorkspaceConfiguration]
     let onSave: (WorkspaceConfiguration) -> Void
     let onCancel: () -> Void
 
@@ -303,14 +312,23 @@ struct WorkspaceEditSheet: View {
         configuration: WorkspaceConfiguration,
         isNew: Bool,
         connectedMonitors: [Monitor],
+        existingConfigurations: [WorkspaceConfiguration] = [],
         onSave: @escaping (WorkspaceConfiguration) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _configuration = State(initialValue: configuration)
         self.isNew = isNew
         self.connectedMonitors = connectedMonitors
+        self.existingConfigurations = existingConfigurations
         self.onSave = onSave
         self.onCancel = onCancel
+    }
+
+    private var isNameValid: Bool {
+        !isNew || WorkspaceConfigurationAddPolicy.isValidNewWorkspaceName(
+            configuration.name,
+            in: existingConfigurations
+        )
     }
 
     var body: some View {
@@ -319,10 +337,19 @@ struct WorkspaceEditSheet: View {
                 .font(.headline)
 
             Form {
-                LabeledContent("Workspace ID") {
-                    Text(configuration.name)
+                if isNew {
+                    TextField("Workspace ID", text: $configuration.name)
                         .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.secondary)
+                        .textFieldStyle(.roundedBorder)
+                    Text("A number, or one of the letters q, w, e. Option + the key switches to it.")
+                        .font(.caption)
+                        .foregroundColor(isNameValid ? .secondary : .red)
+                } else {
+                    LabeledContent("Workspace ID") {
+                        Text(configuration.name)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 TextField("Display Name (optional)", text: Binding(
@@ -359,6 +386,7 @@ struct WorkspaceEditSheet: View {
                     onSave(configuration)
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(!isNameValid)
             }
         }
         .padding()
